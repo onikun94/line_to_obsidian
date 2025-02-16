@@ -7,6 +7,7 @@ interface Bindings {
   LINE_CHANNEL_ACCESS_TOKEN: string;
   LINE_CHANNEL_SECRET: string;
   LINE_MESSAGES: KVNamespace;  // KVストア
+  LINE_USER_MAPPINGS: KVNamespace;  // LINE UserIDとVault IDのマッピング用KVストア
   NOTE_FOLDER_PATH: string;  // ノートの保存先フォルダ
   [key: string]: string | KVNamespace;
 }
@@ -86,11 +87,39 @@ app.get('/messages/:vaultId', async (c: Context) => {
   }
 });
 
-// Webhookエンドポイント
-app.post('/webhook/:vaultId', async (c: Context) => {
+// LINE UserIDとVault IDのマッピングを取得
+async function getVaultIdForUser(c: Context, userId: string): Promise<string | null> {
   try {
-    const vaultId = c.req.param('vaultId');
-    console.log(`Received webhook for vaultId: ${vaultId}`);
+    return await c.env.LINE_USER_MAPPINGS.get(userId);
+  } catch (err) {
+    console.error(`Error fetching vault mapping for user ${userId}:`, err);
+    return null;
+  }
+}
+
+// マッピング設定エンドポイント
+app.post('/mapping', async (c: Context) => {
+  try {
+    const { userId, vaultId } = await c.req.json();
+    if (!userId || !vaultId) {
+      return c.json({ error: 'Missing userId or vaultId' }, 400);
+    }
+
+    await c.env.LINE_USER_MAPPINGS.put(userId, vaultId);
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Error in /mapping:', err);
+    return c.json({
+      error: 'Failed to set mapping',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Webhookエンドポイントの更新
+app.post('/webhook', async (c: Context) => {
+  try {
+    console.log('Received webhook');
     
     // 署名の検証
     const signature = c.req.header('x-line-signature');
@@ -110,10 +139,31 @@ app.post('/webhook/:vaultId', async (c: Context) => {
     // メッセージイベントの処理
     for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
+        const userId = event.source.userId;
+        if (!userId) {
+          console.error('Missing userId in event');
+          continue;
+        }
+
+        // ユーザーのVault IDを取得
+        const vaultId = await getVaultIdForUser(c, userId);
+        if (!vaultId) {
+          console.error(`No vault mapping found for user ${userId}`);
+          // LINEユーザーに設定が必要な旨を通知
+          const client = new line.Client({
+            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+          });
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: 'Obsidianとの連携設定が必要です。プラグインの設定画面から連携を行ってください。'
+          });
+          continue;
+        }
+
         const message: LineMessage = {
           timestamp: event.timestamp,
           messageId: event.message.id,
-          userId: event.source.userId || 'unknown',
+          userId: userId,
           text: event.message.text,
           vaultId: vaultId
         };
@@ -124,7 +174,7 @@ app.post('/webhook/:vaultId', async (c: Context) => {
           JSON.stringify(message)
         );
         
-        console.log(`Saved message: ${event.message.id}`);
+        console.log(`Saved message: ${event.message.id} for vault: ${vaultId}`);
       }
     }
     

@@ -6,6 +6,7 @@ interface LinePluginSettings {
   noteFolderPath: string;
   debugMode: boolean;
   vaultId: string;  // Obsidian vaultを識別するためのID
+  lineUserId: string;  // LINE UserID
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -13,7 +14,8 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   lineSecret: '',
   noteFolderPath: 'LINE',
   debugMode: false,
-  vaultId: ''  // デフォルトは空文字列
+  vaultId: '',  // デフォルトは空文字列
+  lineUserId: ''  // デフォルトは空文字列
 }
 
 interface LineMessage {
@@ -150,6 +152,35 @@ export default class LinePlugin extends Plugin {
       new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
+
+  async registerMapping() {
+    if (!this.settings.lineUserId || !this.settings.vaultId) {
+      new Notice('LINE UserIDとVault IDの両方を設定してください。');
+      return;
+    }
+
+    try {
+      const response = await fetch('https://obsidian-line-plugin.line-to-obsidian.workers.dev/mapping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: this.settings.lineUserId,
+          vaultId: this.settings.vaultId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to register mapping: ${response.statusText}`);
+      }
+
+      new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
+    } catch (error) {
+      new Notice(`マッピングの登録に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.log('Error registering mapping', error as Error);
+    }
+  }
 }
 
 class LineSettingTab extends PluginSettingTab {
@@ -208,6 +239,26 @@ class LineSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.vaultId = value;
           await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('LINE User ID')
+      .setDesc('LINEボットとの会話で取得したユーザーIDを入力してください')
+      .addText(text => text
+        .setPlaceholder('Enter your LINE User ID')
+        .setValue(this.plugin.settings.lineUserId)
+        .onChange(async (value) => {
+          this.plugin.settings.lineUserId = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Register Mapping')
+      .setDesc('LINE UserIDとVault IDのマッピングを登録します')
+      .addButton(button => button
+        .setButtonText('Register')
+        .onClick(async () => {
+          await this.plugin.registerMapping();
         }));
 
     new Setting(containerEl)

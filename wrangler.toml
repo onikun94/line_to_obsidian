@@ -7,7 +7,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # KVストアのバインディング
 kv_namespaces = [
-  { binding = "LINE_MESSAGES", id = "d766e3056fb64ec3bc64708790146d04" }
+  { binding = "LINE_MESSAGES", id = "d766e3056fb64ec3bc64708790146d04" },
+  { binding = "LINE_USER_MAPPINGS", id = "cb97d49334ce4be2a5c94936467201d0" }
 ]
 
 # wrangler.toml (wrangler v3.88.0^)
