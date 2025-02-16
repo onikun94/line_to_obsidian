@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-line",
+  "name": "LINE Integration for Obsidian",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Integrate LINE messaging with Obsidian",
+  "author": "",
+  "authorUrl": "",
+  "isDesktopOnly": true
+} 
