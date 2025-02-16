@@ -19,10 +19,11 @@
       "ES5",
       "ES6",
       "ES7",
-      "ES2021"
+      "WebWorker"
     ],
     "types": [
-      "node"
+      "node",
+      "@cloudflare/workers-types"
     ]
   },
   "include": [
