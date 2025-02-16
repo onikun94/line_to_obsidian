@@ -1,12 +1,8 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice } from 'obsidian';
-import { Client, middleware, WebhookEvent, MessageEvent } from '@line/bot-sdk';
-import express, { Request, Response, Application } from 'express';
-import { createServer, Server } from 'http';
 
 interface LinePluginSettings {
   lineToken: string;
   lineSecret: string;
-  serverPort: number;
   noteFolderPath: string;
   debugMode: boolean;
   vaultId: string;  // Obsidian vaultを識別するためのID
@@ -15,32 +11,38 @@ interface LinePluginSettings {
 const DEFAULT_SETTINGS: LinePluginSettings = {
   lineToken: '',
   lineSecret: '',
-  serverPort: 3000,
   noteFolderPath: 'LINE',
   debugMode: false,
   vaultId: ''  // デフォルトは空文字列
 }
 
+interface LineMessage {
+  timestamp: number;
+  messageId: string;
+  userId: string;
+  text: string;
+  vaultId: string;
+}
+
 export default class LinePlugin extends Plugin {
   settings: LinePluginSettings;
-  server: Server;
-  client: Client;
-  private isServerRunning: boolean = false;
 
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new LineSettingTab(this.app, this));
     
-    // サーバー起動を試みる
-    await this.startServer();
-    
-    // コマンドの追加
+    // 同期コマンドの追加
     this.addCommand({
-      id: 'restart-line-server',
-      name: 'Restart LINE Server',
+      id: 'sync-line-messages',
+      name: 'Sync LINE Messages',
       callback: async () => {
-        await this.restartServer();
+        await this.syncMessages();
       },
+    });
+
+    // リボンアイコンの追加
+    this.addRibbonIcon('refresh-cw', 'Sync LINE Messages', async () => {
+      await this.syncMessages();
     });
   }
 
@@ -53,13 +55,15 @@ export default class LinePlugin extends Plugin {
     }
   }
 
-  private async startServer() {
-    if (!this.settings.lineToken || !this.settings.lineSecret) {
-      new Notice('LINE credentials not configured. Please set them in plugin settings.');
-      this.log('Missing LINE credentials');
-      return;
-    }
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
+
+  private async syncMessages() {
     if (!this.settings.vaultId) {
       new Notice('Vault ID not configured. Please set it in plugin settings.');
       this.log('Missing Vault ID');
@@ -67,168 +71,84 @@ export default class LinePlugin extends Plugin {
     }
 
     try {
-      // LINE Clientの初期化
-      this.client = new Client({
-        channelAccessToken: this.settings.lineToken,
-        channelSecret: this.settings.lineSecret
-      });
-
-      // Expressサーバーの設定
-      const app: Application = express();
+      new Notice('Syncing LINE messages...');
+      this.log('Starting sync process...');
       
-      // raw bodyを保持するための設定
-      app.use(express.json({
-        verify: (req: any, res, buf) => {
-          req.rawBody = buf;
-        }
-      }));
-      app.use(express.urlencoded({ extended: true }));
+      // Cloudflare Workersからメッセージを取得
+      const url = `https://obsidian-line-plugin.line-to-obsidian.workers.dev/messages/${this.settings.vaultId}`;
+      this.log(`Fetching messages from: ${url}`);
+      
+      const response = await fetch(url);
+      this.log(`Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.log(`Error response body: ${errorText}`);
+        throw new Error(`Failed to fetch messages: ${response.statusText}`);
+      }
 
-      // ヘルスチェックエンドポイント
-      app.get('/health', (req: Request, res: Response) => {
-        res.status(200).json({ status: 'ok' });
-      });
-
-      // Webhookエンドポイント
-      app.post('/webhook/:vaultId', middleware({
-        channelAccessToken: this.settings.lineToken,
-        channelSecret: this.settings.lineSecret
-      }), (req: Request, res: Response, next) => {
-        if (this.settings.debugMode) {
-          this.log(`Webhook request received for vaultId: ${req.params.vaultId}`);
-          this.log(`Expected vaultId: ${this.settings.vaultId}`);
-          this.log(`Request path: ${req.path}`);
-          this.log(`Request method: ${req.method}`);
-        }
-        
-        // vaultIdの検証
-        const requestVaultId = req.params.vaultId;
-        if (requestVaultId !== this.settings.vaultId) {
-          this.log(`Invalid vault ID received: ${requestVaultId}`);
-          res.status(403).json({ error: 'Invalid vault ID' });
-          return;
-        }
-        
-        if (this.settings.debugMode) {
-          this.log('VaultID verification passed');
-        }
-        
-        next();
-      }, async (req: Request, res: Response) => {
-        try {
-          const events = req.body?.events as WebhookEvent[];
-          if (events) {
-            await this.handleEvents(events);
-          }
-          res.status(200).end();
-        } catch (err) {
-          this.log('Webhook error', err as Error);
-          res.status(500).json({ error: 'Internal server error' });
-        }
-      });
-
-      // サーバーの起動
-      this.server = createServer(app);
-      this.server.listen(this.settings.serverPort, () => {
-        this.isServerRunning = true;
-        this.log(`LINE Webhook server is running on port ${this.settings.serverPort}`);
-        new Notice(`LINE server started on port ${this.settings.serverPort}`);
-      });
-
-      // エラーハンドリング
-      this.server.on('error', (error: Error) => {
-        if ((error as any).code === 'EADDRINUSE') {
-          this.log(`Port ${this.settings.serverPort} is already in use`);
-          new Notice(`Failed to start LINE server: Port ${this.settings.serverPort} is already in use`);
-        } else {
-          this.log('Server error', error);
-          new Notice('LINE server error occurred');
-        }
-        this.isServerRunning = false;
-      });
-
-    } catch (error) {
-      this.log('Server startup error', error as Error);
-      new Notice('Failed to start LINE server');
-    }
-  }
-
-  async restartServer() {
-    if (this.isServerRunning) {
-      this.server.close();
-      this.isServerRunning = false;
-    }
-    await this.startServer();
-  }
-
-  async handleEvents(events: WebhookEvent[]) {
-    for (const event of events) {
+      const responseText = await response.text();
+      this.log(`Response body: ${responseText}`);
+      
+      let messages: LineMessage[];
       try {
-        if (event.type === 'message' && event.message.type === 'text') {
-          await this.saveMessageAsNote(event as MessageEvent);
-        }
-      } catch (error) {
-        this.log(`Error handling event: ${JSON.stringify(event)}`, error as Error);
+        messages = JSON.parse(responseText) as LineMessage[];
+        this.log(`Parsed ${messages.length} messages`);
+      } catch (parseError) {
+        this.log('Failed to parse response as JSON', parseError as Error);
+        throw new Error('Invalid response format');
       }
-    }
-  }
 
-  async saveMessageAsNote(event: MessageEvent) {
-    if (event.message.type !== 'text') return;
-    if (!event.source.userId) {
-      this.log('No user ID in event');
-      return;
-    }
+      let newMessageCount = 0;
 
-    const timestamp = new Date(event.timestamp);
-    const fileName = `${timestamp.toISOString().split('T')[0]}-${event.message.id}.md`;
-    const folderPath = this.settings.noteFolderPath;
+      for (const message of messages) {
+        const fileName = `${new Date(message.timestamp).toISOString().split('T')[0]}-${message.messageId}.md`;
+        const filePath = `${this.settings.noteFolderPath}/${fileName}`;
+        this.log(`Processing message: ${message.messageId}`);
 
-    try {
-      // フォルダが存在しない場合は作成
-      if (!(await this.app.vault.adapter.exists(folderPath))) {
-        await this.app.vault.createFolder(folderPath);
-        this.log(`Created folder: ${folderPath}`);
+        try {
+          // ファイルが既に存在するかチェック
+          const exists = await this.app.vault.adapter.exists(filePath);
+          if (exists) {
+            this.log(`File already exists: ${filePath}`);
+            continue;
+          }
+
+          // フォルダが存在しない場合は作成
+          if (!(await this.app.vault.adapter.exists(this.settings.noteFolderPath))) {
+            await this.app.vault.createFolder(this.settings.noteFolderPath);
+            this.log(`Created folder: ${this.settings.noteFolderPath}`);
+          }
+
+          // ノートの内容を作成
+          const content = [
+            `---`,
+            `source: LINE`,
+            `date: ${new Date(message.timestamp).toISOString()}`,
+            `messageId: ${message.messageId}`,
+            `userId: ${message.userId}`,
+            `---`,
+            ``,
+            `${message.text}`
+          ].join('\n');
+
+          // ノートを保存
+          await this.app.vault.create(filePath, content);
+          newMessageCount++;
+          this.log(`Created note: ${filePath}`);
+        } catch (err) {
+          this.log(`Error processing message ${message.messageId}`, err as Error);
+        }
       }
       
-      // ノートの内容を作成
-      const content = [
-        `---`,
-        `source: LINE`,
-        `date: ${timestamp.toISOString()}`,
-        `messageId: ${event.message.id}`,
-        `userId: ${event.source.userId}`,
-        `---`,
-        ``,
-        `${event.message.text}`
-      ].join('\n');
-
-      // ノートを保存
-      const filePath = `${folderPath}/${fileName}`;
-      await this.app.vault.create(filePath, content);
-      this.log(`Saved message to: ${filePath}`);
-      new Notice(`New LINE message saved: ${fileName}`);
-
-    } catch (error) {
-      this.log('Error saving message', error as Error);
-      new Notice('Failed to save LINE message');
+      if (this.settings.debugMode) {
+        this.log(`Messages synced successfully. ${newMessageCount} new messages.`);
+      }
+      new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
+    } catch (err) {
+      this.log('Error syncing messages', err as Error);
+      new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
-  }
-
-  onunload() {
-    if (this.server) {
-      this.server.close();
-      this.log('Server stopped');
-    }
-  }
-
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
-
-  async saveSettings() {
-    await this.saveData(this.settings);
-    await this.restartServer();
   }
 }
 
@@ -269,17 +189,6 @@ class LineSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('Server Port')
-      .setDesc('Port number for the webhook server (default: 3000)')
-      .addText(text => text
-        .setPlaceholder('3000')
-        .setValue(String(this.plugin.settings.serverPort))
-        .onChange(async (value) => {
-          this.plugin.settings.serverPort = Number(value);
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
       .setName('Note Folder Path')
       .setDesc('Folder path where LINE messages will be saved')
       .addText(text => text
@@ -311,4 +220,4 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
   }
-} 
+}
