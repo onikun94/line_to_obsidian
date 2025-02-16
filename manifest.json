@@ -3,8 +3,10 @@
   "name": "LINE Integration for Obsidian",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
-  "description": "Integrate LINE messaging with Obsidian",
-  "author": "",
-  "authorUrl": "",
-  "isDesktopOnly": true
+  "description": "Integrate LINE messaging with Obsidian. Save your LINE messages directly to your Obsidian vault.",
+  "author": "onikun94",
+  "authorUrl": "https://github.com/onikun94",
+  "fundingUrl": "https://github.com/sponsors/onikun94",
+  "isDesktopOnly": true,
+  "repo": "onikun94/obsidian-line"
 } 

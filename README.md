@@ -7,7 +7,7 @@ LINEからのメッセージを自動的にObsidianのノートとして保存�
 - LINEメッセージの自動保存
 - 複数のObsidian Vault対応
 - カスタマイズ可能な保存先フォルダ
-- デバッグモード対応
+- 複数ユーザーサポート（各ユーザーが独自のVaultにメッセージを保存可能）
 
 ## システム構成
 
@@ -15,55 +15,72 @@ LINEからのメッセージを自動的にObsidianのノートとして保存�
 
 ## インストール方法
 
-1. Obsidianのプラグイン設定から「Community Plugins」を開く
-2. 「Browse」をクリックし、「LINE」で検索
-3. 「LINE Plugin」をインストール
+### コミュニティプラグインから（推奨）
+1. Obsidianの設定を開く
+2. 「サードパーティプラグイン」を選択
+3. 「安全モード」をオフにする
+4. 「コミュニティプラグインを閲覧」をクリック
+5. "LINE Integration"を検索
+6. インストールをクリック
 
-## 設定
+### 手動インストール
+1. [最新のリリース](https://github.com/yourusername/obsidian-line/releases/latest)をダウンロード
+2. ファイルを`.obsidian/plugins/obsidian-line/`に展開
+3. Obsidianを再起動
+4. 設定でプラグインを有効化
 
-1. LINE Developers Consoleで以下を取得：
+## セットアップ
+
+### LINE Bot の設定
+1. [LINE Developers Console](https://developers.line.biz/)にアクセス
+2. 新しいプロバイダーを作成
+3. 新しいチャネル（Messaging API）を作成
+4. 以下の情報を取得：
    - Channel Access Token
    - Channel Secret
-2. プラグイン設定で以下を設定：
+5. Webhook URLを設定：
+   - URL: `https://obsidian-line-plugin.line-to-obsidian.workers.dev/webhook`
+   - Webhook送信を有効化
+
+### プラグインの設定
+1. プラグインの設定を開く
+2. 以下の項目を設定：
    - LINE Channel Access Token
    - LINE Channel Secret
-   - Vault ID（一意の識別子）
-   - サーバーポート番号（デフォルト: 3000）
+   - Vault ID（任意の一意の文字列）
    - 保存先フォルダパス
-3. LINE DevelopersでWebhook URLを設定：
-   - 形式: `https://あなたのドメイン/webhook/あなたのVaultID`
-   - 例: `https://example.ngrok.io/webhook/your-vault-id`
+3. LINEボットに適当なメッセージを送信
+4. 表示されたLINE User IDをプラグインの設定画面に入力
+5. "Register Mapping"ボタンをクリック
 
 ## 使用方法
 
-1. プラグインをインストールし、設定を完了
-2. LINEボットに対してメッセージを送信
-3. 自動的にObsidianのノートとして保存
+1. LINEボットにメッセージを送信
+2. 自動的にObsidianのノートとして保存
+3. プラグインのリボンアイコンをクリックして手動同期も可能
 
-## 注意事項
+## セキュリティ
 
-- Vault IDは他のユーザーと重複しないようにしてください
-- サーバーポートが他のアプリケーションと競合しないよう注意してください
-- デバッグモードはトラブルシューティング時のみ有効にしてください
-- Webhook URLには必ずVault IDを含めてください
+- 各ユーザーのメッセージは、設定したVaultにのみ保存されます
+- 他のユーザーのメッセージが混ざることはありません
+- LINE User IDとVault IDのマッピングは安全に管理されています
 
 ## トラブルシューティング
-- 403エラーが発生する場合：
-  - Webhook URLに正しいVault IDが含まれているか確認
-  - プラグイン設定のVault IDと一致しているか確認
-- Webhookが動作しない場合：
-  - ngrokが正常に動作しているか確認
-  - ポート番号が正しいか確認
-  - Webhook URLが正しく設定されているか確認
-- メッセージが保存されない場合：
-  - プラグインの設定を確認
-  - 保存先フォルダのパスが正しいか確認
-  - LINEの認証情報が正しいか確認
 
-## セキュリティ注意事項
-- チャネルシークレットとアクセストークンは安全に保管
-- Vault IDは推測されにくい値を使用（UUIDを推奨）
-- ngrokのURLは定期的に変更される為、その都度Webhook URLの更新が必要
+### メッセージが保存されない
+1. プラグインの設定を確認
+2. LINE User IDとVault IDのマッピングが正しく設定されているか確認
+3. デバッグモードを有効にして詳細なログを確認
+
+### 連携エラー
+1. Channel Access TokenとChannel Secretが正しいか確認
+2. Webhookが有効になっているか確認
+3. Webhook URLが正しく設定されているか確認
 
 ## サポート
-問題や質問がある場合は、GitHubのIssuesにて報告してください。 
+
+問題や質問がある場合は、[GitHub Issues](https://github.com/yourusername/obsidian-line/issues)にて報告してください。
+
+## ライセンス
+
+[MIT License](LICENSE) 
