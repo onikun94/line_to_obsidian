@@ -155,7 +155,7 @@ app.post('/webhook', async (c: Context) => {
           });
           await client.replyMessage(event.replyToken, {
             type: 'text',
-            text: 'Obsidianとの連携設定が必要です。プラグインの設定画面から連携を行ってください。'
+            text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`
           });
           continue;
         }
