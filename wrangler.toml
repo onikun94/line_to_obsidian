@@ -1,0 +1,22 @@
+name = "obsidian-line-plugin"
+main = "worker.ts"  # Workersのエントリーポイント
+compatibility_date = "2024-09-23"  # Node.js互換性v2のための日付
+
+# Node.js互換性フラグ
+compatibility_flags = ["nodejs_compat"]
+
+# KVストアのバインディング
+kv_namespaces = [
+  { binding = "LINE_MESSAGES", id = "d766e3056fb64ec3bc64708790146d04" }
+]
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true
+
+
+[build]
+command = "esbuild worker.ts --bundle --format=esm --outfile=dist/worker.js --platform=node"
+
+[vars]
+# 公開しても問題ない環境変数はここに記述できます 
