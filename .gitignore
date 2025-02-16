@@ -35,4 +35,20 @@ pnpm-debug.log*
 *.tgz
 
 # Yarn Integrity file
-.yarn-integrity 
+.yarn-integrity
+
+# Dependency directories
+dist/
+build/
+
+# Obsidian
+.obsidian/
+
+# Wrangler
+.wrangler/
+
+# Environment variables
+.dev.vars
+
+# OS files
+Thumbs.db 
