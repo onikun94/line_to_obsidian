@@ -1,86 +1,69 @@
 # Obsidian LINE Plugin
 
-LINEからのメッセージを自動的にObsidianのノートとして保存するプラグインです。
+ObsidianとLINEを連携させるプラグインです。LINEからメッセージを送信すると、Obsidianのノートとして保存されます。
 
-## 機能
+## プロジェクト構成
 
-- LINEメッセージの自動保存
-- 複数のObsidian Vault対応
-- カスタマイズ可能な保存先フォルダ
-- 複数ユーザーサポート（各ユーザーが独自のVaultにメッセージを保存可能）
+このプロジェクトは2つの主要なパッケージで構成されています：
 
-## システム構成
+1. `packages/cloudflare-worker`: LINEからのメッセージを受け取り、Obsidianに転送するCloudflare Worker
+2. `packages/obsidian-plugin`: メッセージを受け取り、ノートとして保存するObsidianプラグイン
 
-システムの詳細な流れについては、[シーケンス図](docs/sequence-diagram.md)を参照してください。
+## 開発環境のセットアップ
 
-## インストール方法
+1. 依存関係のインストール:
+```bash
+pnpm install
+```
 
-### コミュニティプラグインから（推奨）
-1. Obsidianの設定を開く
-2. 「サードパーティプラグイン」を選択
-3. 「安全モード」をオフにする
-4. 「コミュニティプラグインを閲覧」をクリック
-5. "LINE Integration"を検索
-6. インストールをクリック
+2. 開発モードの起動:
 
-### 手動インストール
-1. [最新のリリース](https://github.com/yourusername/obsidian-line/releases/latest)をダウンロード
-2. ファイルを`.obsidian/plugins/obsidian-line/`に展開
-3. Obsidianを再起動
-4. 設定でプラグインを有効化
+- Obsidianプラグインの開発:
+```bash
+pnpm dev
+```
 
-## セットアップ
+- Cloudflare Workerの開発:
+```bash
+pnpm --filter cloudflare-worker dev
+```
 
-### LINE Bot の設定
-1. [LINE Developers Console](https://developers.line.biz/)にアクセス
-2. 新しいプロバイダーを作成
-3. 新しいチャネル（Messaging API）を作成
-4. 以下の情報を取得：
-   - Channel Access Token
-   - Channel Secret
-5. Webhook URLを設定：
-   - URL: `https://obsidian-line-plugin.line-to-obsidian.workers.dev/webhook`
-   - Webhook送信を有効化
+## ビルドとデプロイ
 
-### プラグインの設定
-1. プラグインの設定を開く
-2. 以下の項目を設定：
-   - LINE Channel Access Token
-   - LINE Channel Secret
-   - Vault ID（任意の一意の文字列）
-   - 保存先フォルダパス
-3. LINEボットに適当なメッセージを送信
-4. 表示されたLINE User IDをプラグインの設定画面に入力
-5. "Register Mapping"ボタンをクリック
+### ビルド
 
-## 使用方法
+全パッケージのビルド:
+```bash
+pnpm build
+```
 
-1. LINEボットにメッセージを送信
-2. 自動的にObsidianのノートとして保存
-3. プラグインのリボンアイコンをクリックして手動同期も可能
+個別のパッケージのビルド:
+```bash
+pnpm --filter obsidian-plugin build
+pnpm --filter cloudflare-worker build
+```
 
-## セキュリティ
+### デプロイ
 
-- 各ユーザーのメッセージは、設定したVaultにのみ保存されます
-- 他のユーザーのメッセージが混ざることはありません
-- LINE User IDとVault IDのマッピングは安全に管理されています
+Cloudflare Workerのデプロイ:
+```bash
+pnpm --filter cloudflare-worker deploy
+```
 
-## トラブルシューティング
+## 設定
 
-### メッセージが保存されない
-1. プラグインの設定を確認
-2. LINE User IDとVault IDのマッピングが正しく設定されているか確認
-3. デバッグモードを有効にして詳細なログを確認
+### Cloudflare Worker
 
-### 連携エラー
-1. Channel Access TokenとChannel Secretが正しいか確認
-2. Webhookが有効になっているか確認
-3. Webhook URLが正しく設定されているか確認
+1. `wrangler.toml`の設定
+2. LINE Messaging APIの設定
+   - チャネルシークレット
+   - チャネルアクセストークン
 
-## サポート
+### Obsidianプラグイン
 
-問題や質問がある場合は、[GitHub Issues](https://github.com/yourusername/obsidian-line/issues)にて報告してください。
+1. プラグインの有効化
+2. Webhook URLの設定
 
 ## ライセンス
 
-[MIT License](LICENSE) 
+MIT 

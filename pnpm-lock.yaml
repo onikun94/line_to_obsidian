@@ -6,11 +6,10 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  packages/cloudflare-worker:
     dependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20231218.0
-        version: 4.20250214.0
       '@line/bot-sdk':
         specifier: ^9.7.1
         version: 9.7.1
@@ -20,9 +19,37 @@ importers:
       crypto-browserify:
         specifier: ^3.12.0
         version: 3.12.1
+      events:
+        specifier: ^3.3.0
+        version: 3.3.0
       hono:
         specifier: ^3.12.0
         version: 3.12.12
+      stream-browserify:
+        specifier: ^3.0.0
+        version: 3.0.0
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20231218.0
+        version: 4.20250214.0
+      esbuild:
+        specifier: 0.17.3
+        version: 0.17.3
+      typescript:
+        specifier: 4.7.4
+        version: 4.7.4
+      wrangler:
+        specifier: ^3.109.1
+        version: 3.109.1(@cloudflare/workers-types@4.20250214.0)
+
+  packages/obsidian-plugin:
+    dependencies:
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
+      crypto-browserify:
+        specifier: ^3.12.0
+        version: 3.12.1
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
@@ -51,9 +78,6 @@ importers:
       typescript:
         specifier: 4.7.4
         version: 4.7.4
-      wrangler:
-        specifier: ^3.109.1
-        version: 3.109.1(@cloudflare/workers-types@4.20250214.0)
 
 packages:
 
@@ -920,6 +944,10 @@ packages:
   esutils@2.0.3:
     resolution: {integrity: sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==}
     engines: {node: '>=0.10.0'}
+
+  events@3.3.0:
+    resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
+    engines: {node: '>=0.8.x'}
 
   evp_bytestokey@1.0.3:
     resolution: {integrity: sha512-/f2Go4TognH/KvCISP7OUsHn85hT9nUkxxA9BEWxFn+Oj9o8ZNLm/40hdlgSLyuOimsrTKLUMEorQexp/aPQeA==}
@@ -2356,6 +2384,8 @@ snapshots:
   estree-walker@0.6.1: {}
 
   esutils@2.0.3: {}
+
+  events@3.3.0: {}
 
   evp_bytestokey@1.0.3:
     dependencies:

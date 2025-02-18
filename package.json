@@ -1,37 +1,18 @@
 {
-  "name": "obsidian-line-plugin",
+  "name": "obsidian-line",
+  "private": true,
   "version": "1.0.0",
   "description": "LINE integration for Obsidian",
-  "main": "main.js",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "build:worker": "esbuild worker.ts --bundle --format=esm --outfile=dist/worker.js --platform=browser",
-    "version": "node version-bump.mjs && git add manifest.json versions.json",
-    "deploy": "pnpm build:worker && wrangler deploy",
-    "dev:cloudflare": "pnpm build:worker && wrangler dev"
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter obsidian-plugin dev",
+    "deploy": "pnpm --filter cloudflare-worker deploy"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^16.11.6",
-    "@typescript-eslint/eslint-plugin": "5.29.0",
-    "@typescript-eslint/parser": "5.29.0",
-    "builtin-modules": "3.3.0",
-    "esbuild": "0.17.3",
-    "obsidian": "latest",
-    "tslib": "2.4.0",
-    "typescript": "4.7.4",
-    "wrangler": "^3.109.1"
-  },
-  "dependencies": {
-    "@cloudflare/workers-types": "^4.20231218.0",
-    "@line/bot-sdk": "^9.7.1",
-    "hono": "^3.12.0",
-    "buffer": "^6.0.3",
-    "stream-browserify": "^3.0.0",
-    "crypto-browserify": "^3.12.0"
-  },
   "packageManager": "pnpm@9.12.1+sha512.e5a7e52a4183a02d5931057f7a0dbff9d5e9ce3161e33fa68ae392125b79282a8a8a470a51dfc8a0ed86221442eb2fb57019b0990ed24fab519bf0e1bc5ccfc4"
 }

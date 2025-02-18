@@ -22,11 +22,10 @@
       "WebWorker"
     ],
     "types": [
-      "node",
-      "@cloudflare/workers-types"
+      "node"
     ]
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts"
   ]
 } 
