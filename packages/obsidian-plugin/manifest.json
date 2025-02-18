@@ -1,6 +1,6 @@
 {
-  "id": "obsidian-line",
-  "name": "LINE Integration for Obsidian",
+  "id": "line-to-obsidian",
+  "name": "LINE to Obsidian",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
   "description": "Integrate LINE messaging with Obsidian. Save your LINE messages directly to your Obsidian vault.",
