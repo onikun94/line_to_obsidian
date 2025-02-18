@@ -21,7 +21,7 @@ ObsidianとLINEを連携させるプラグインです。LINEからメッセー�
 
 ### 2. LINEの設定
 
-1. LINE公式アカウント(https://lin.ee/fq051VM)を友だち追加
+1. [LINE公式アカウント](https://lin.ee/fq051VM)を友だち追加
 2. 任意のメッセージを送信(例: `test`)
 3. メッセージを送信したら、LINE User ID が返ってきます
 4. 返ってきた LINE User ID を Obsidian のプラグインの設定に入力してください
