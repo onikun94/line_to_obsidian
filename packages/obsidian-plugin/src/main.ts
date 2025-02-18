@@ -1,19 +1,13 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice } from 'obsidian';
 
 interface LinePluginSettings {
-  lineToken: string;
-  lineSecret: string;
   noteFolderPath: string;
-  debugMode: boolean;
   vaultId: string;  // Obsidian vaultを識別するためのID
   lineUserId: string;  // LINE UserID
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
-  lineToken: '',
-  lineSecret: '',
   noteFolderPath: 'LINE',
-  debugMode: false,
   vaultId: '',  // デフォルトは空文字列
   lineUserId: ''  // デフォルトは空文字列
 }
@@ -49,11 +43,9 @@ export default class LinePlugin extends Plugin {
   }
 
   private log(message: string, error?: Error) {
-    if (this.settings.debugMode) {
-      console.log(`[LINE Plugin] ${message}`);
-      if (error) {
-        console.error(error);
-      }
+    console.log(`[LINE Plugin] ${message}`);
+    if (error) {
+      console.error(error);
     }
   }
 
@@ -143,9 +135,6 @@ export default class LinePlugin extends Plugin {
         }
       }
       
-      if (this.settings.debugMode) {
-        this.log(`Messages synced successfully. ${newMessageCount} new messages.`);
-      }
       new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
     } catch (err) {
       this.log('Error syncing messages', err as Error);
@@ -198,28 +187,6 @@ class LineSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', {text: 'LINE Integration Settings'});
 
     new Setting(containerEl)
-      .setName('LINE Channel Access Token')
-      .setDesc('Enter your LINE Channel Access Token from LINE Developers Console')
-      .addText(text => text
-        .setPlaceholder('Enter your token')
-        .setValue(this.plugin.settings.lineToken)
-        .onChange(async (value) => {
-          this.plugin.settings.lineToken = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('LINE Channel Secret')
-      .setDesc('Enter your LINE Channel Secret from LINE Developers Console')
-      .addText(text => text
-        .setPlaceholder('Enter your secret')
-        .setValue(this.plugin.settings.lineSecret)
-        .onChange(async (value) => {
-          this.plugin.settings.lineSecret = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
       .setName('Note Folder Path')
       .setDesc('Folder path where LINE messages will be saved')
       .addText(text => text
@@ -261,14 +228,5 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.registerMapping();
         }));
 
-    new Setting(containerEl)
-      .setName('Debug Mode')
-      .setDesc('Enable detailed logging for troubleshooting')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.debugMode)
-        .onChange(async (value) => {
-          this.plugin.settings.debugMode = value;
-          await this.plugin.saveSettings();
-        }));
   }
 }
