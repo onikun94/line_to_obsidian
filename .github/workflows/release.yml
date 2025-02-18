@@ -35,7 +35,7 @@ jobs:
           
           # Create release files
           mkdir ${{ github.event.repository.name }}
-          cp main.js manifest.json styles.css ${{ github.event.repository.name }}
+          cp main.js manifest.json ${{ github.event.repository.name }}
           zip -r ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}
           
           # Create GitHub release
