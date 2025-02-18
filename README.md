@@ -45,16 +45,27 @@ pnpm --filter cloudflare-worker build
 
 ### デプロイ
 
-Cloudflare Workerのデプロイ:
+#### Cloudflare Worker
+
+Cloudflare Workerは、`main`ブランチへのプッシュ時に自動的にデプロイされます。
+手動でデプロイする場合は以下のコマンドを実行します：
+
 ```bash
 pnpm --filter cloudflare-worker deploy
 ```
+
+#### Obsidianプラグイン
+
+GitHubリリースを作成することで、プラグインがビルドされます。
+新しいバージョンをリリースする場合は、タグを作成してプッシュしてください。
 
 ## 設定
 
 ### Cloudflare Worker
 
 1. `wrangler.toml`の設定
+   - KVストアのバインディング
+   - 環境変数の設定
 2. LINE Messaging APIの設定
    - チャネルシークレット
    - チャネルアクセストークン
