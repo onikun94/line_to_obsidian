@@ -45,4 +45,4 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
-            ${{ github.event.repository.name }}.zip packages/obsidian-plugin/main.js packages/obsidian-plugin/manifest.json 
+            ${{ github.event.repository.name }}.zip main.js manifest.json 
