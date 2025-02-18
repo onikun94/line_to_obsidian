@@ -2,78 +2,41 @@
 
 ObsidianとLINEを連携させるプラグインです。LINEからメッセージを送信すると、Obsidianのノートとして保存されます。
 
-## プロジェクト構成
+## 機能
 
-このプロジェクトは2つの主要なパッケージで構成されています：
+- LINEで送信したメッセージを自動的にObsidianのノートとして保存
+- テキスト、画像、音声メッセージに対応
+- カスタマイズ可能なノート保存先フォルダ
+- 柔軟なノートのテンプレート設定
 
-1. `packages/cloudflare-worker`: LINEからのメッセージを受け取り、Obsidianに転送するCloudflare Worker
-2. `packages/obsidian-plugin`: メッセージを受け取り、ノートとして保存するObsidianプラグイン
+## セットアップ方法
 
-## 開発環境のセットアップ
+### 1. Obsidianプラグインのインストール
 
-1. 依存関係のインストール:
-```bash
-pnpm install
-```
+1. Obsidianの設定を開く
+2. サードパーティプラグイン → コミュニティプラグイン → 閲覧
+3. "LINE"で検索
+4. "Obsidian LINE Plugin"をインストール
+5. プラグインを有効化
 
-2. 開発モードの起動:
+### 2. LINEの設定
 
-- Obsidianプラグインの開発:
-```bash
-pnpm dev
-```
+1. LINE公式アカウント(https://lin.ee/fq051VM)を友だち追加
+2. 任意のメッセージを送信(例: `test`)
+3. メッセージを送信したら、LINE User ID が返ってきます
+4. 返ってきた LINE User ID を Obsidian のプラグインの設定に入力してください
+### 3. プラグインの設定
 
-- Cloudflare Workerの開発:
-```bash
-pnpm --filter cloudflare-worker dev
-```
+1. プラグインの設定を開く
+2. 保存先フォルダを設定(任意のフォルダを指定)
+3. valut ID を入力(IDは任意のものでOK)
+4. プラグインの設定に LINE User ID(LINEの設定で取得したもの) を入力
+5. Register ボタンを押す
 
-## ビルドとデプロイ
 
-### ビルド
+## サポート
 
-全パッケージのビルド:
-```bash
-pnpm build
-```
-
-個別のパッケージのビルド:
-```bash
-pnpm --filter obsidian-plugin build
-pnpm --filter cloudflare-worker build
-```
-
-### デプロイ
-
-#### Cloudflare Worker
-
-Cloudflare Workerは、`main`ブランチへのプッシュ時に自動的にデプロイされます。
-手動でデプロイする場合は以下のコマンドを実行します：
-
-```bash
-pnpm --filter cloudflare-worker deploy
-```
-
-#### Obsidianプラグイン
-
-GitHubリリースを作成することで、プラグインがビルドされます。
-新しいバージョンをリリースする場合は、タグを作成してプッシュしてください。
-
-## 設定
-
-### Cloudflare Worker
-
-1. `wrangler.toml`の設定
-   - KVストアのバインディング
-   - 環境変数の設定
-2. LINE Messaging APIの設定
-   - チャネルシークレット
-   - チャネルアクセストークン
-
-### Obsidianプラグイン
-
-1. プラグインの有効化
-2. Webhook URLの設定
+問題が発生した場合は、[GitHub Issues](https://github.com/yourusername/obsidian-line/issues)にご報告ください。
 
 ## ライセンス
 
