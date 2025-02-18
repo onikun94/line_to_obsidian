@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      wrangler:
+        specifier: ^3.109.1
+        version: 3.109.1(@cloudflare/workers-types@4.20250214.0)
 
   packages/cloudflare-worker:
     dependencies:
