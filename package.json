@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm --filter obsidian-plugin build",
     "dev": "pnpm --filter obsidian-plugin dev",
     "deploy": "pnpm --filter cloudflare-worker deploy"
   },
