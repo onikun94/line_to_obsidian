@@ -2,6 +2,7 @@
 node_modules/
 
 # Build outputs
+main.js
 *.js.map
 
 # Environment files
