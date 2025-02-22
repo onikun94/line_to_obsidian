@@ -1,4 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { requestUrl } from 'obsidian';
+import { API_ENDPOINTS } from './constants';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -69,19 +71,22 @@ export default class LinePlugin extends Plugin {
       this.log('Starting sync process...');
       
       // Cloudflare Workersからメッセージを取得
-      const url = `https://obsidian-line-plugin.line-to-obsidian.workers.dev/messages/${this.settings.vaultId}`;
+      const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId);
       this.log(`Fetching messages from: ${url}`);
       
-      const response = await fetch(url);
+      const response = await requestUrl({
+        url: url,
+        method: 'GET',
+      });
       this.log(`Response status: ${response.status}`);
       
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (response.status !== 200) {
+        const errorText = response.text;
         this.log(`Error response body: ${errorText}`);
-        throw new Error(`Failed to fetch messages: ${response.statusText}`);
+        throw new Error(`Failed to fetch messages: ${response.status}`);
       }
 
-      const responseText = await response.text();
+      const responseText = response.text;
       this.log(`Response body: ${responseText}`);
       
       let messages: LineMessage[];
@@ -149,7 +154,8 @@ export default class LinePlugin extends Plugin {
     }
 
     try {
-      const response = await fetch('https://obsidian-line-plugin.line-to-obsidian.workers.dev/mapping', {
+      const response = await requestUrl({
+        url: API_ENDPOINTS.MAPPING,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,8 +166,8 @@ export default class LinePlugin extends Plugin {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to register mapping: ${response.statusText}`);
+      if (response.status !== 200) {
+        throw new Error('マッピングの登録に失敗しました');
       }
 
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');

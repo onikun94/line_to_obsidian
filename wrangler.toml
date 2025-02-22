@@ -1,4 +1,4 @@
-name = "obsidian-line-plugin"
+name = "line-to-obsidian"
 main = "packages/cloudflare-worker/src/worker.ts"
 compatibility_date = "2024-09-23"
 
@@ -7,8 +7,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # KVストアのバインディング
 kv_namespaces = [
-  { binding = "LINE_MESSAGES", id = "d766e3056fb64ec3bc64708790146d04" },
-  { binding = "LINE_USER_MAPPINGS", id = "cb97d49334ce4be2a5c94936467201d0" }
+  { binding = "LINE_MESSAGES", id = "27d7dbccef1b42fc9e0c4fde1e9fe005" },
+  { binding = "LINE_USER_MAPPINGS", id = "65f9de2e1c514dd3aae66f79f6ceb936" }
 ]
 
 # wrangler.toml (wrangler v3.88.0^)
