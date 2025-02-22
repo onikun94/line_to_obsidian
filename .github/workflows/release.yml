@@ -28,6 +28,8 @@ jobs:
         run: pnpm install
 
       - name: Build plugin
+        env:
+          OBSIDIAN_LINE_API_URL: ${{ secrets.OBSIDIAN_LINE_API_URL }}
         run: pnpm --filter obsidian-plugin build
 
       - name: Create release
