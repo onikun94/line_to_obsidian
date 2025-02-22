@@ -1,6 +1,9 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const banner =
 `/*
@@ -18,6 +21,9 @@ const context = await esbuild.context({
   },
   entryPoints: ["src/main.ts"],
   bundle: true,
+  define: {
+    'process.env.OBSIDIAN_LINE_API_URL': JSON.stringify(process.env.OBSIDIAN_LINE_API_URL)
+  },
   external: [
     "obsidian",
     "electron",
