@@ -40,10 +40,10 @@ jobs:
           
           # Create release files
           mkdir ${{ github.event.repository.name }}
-          cp packages/obsidian-plugin/main.js packages/obsidian-plugin/manifest.json ${{ github.event.repository.name }}
+          cp packages/obsidian-plugin/main.js manifest.json ${{ github.event.repository.name }}
           zip -r ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}
           
           # Create GitHub release
           gh release create "$tag" \
             --title="$tag" \
-            ${{ github.event.repository.name }}.zip packages/obsidian-plugin/main.js packages/obsidian-plugin/manifest.json
+            ${{ github.event.repository.name }}.zip packages/obsidian-plugin/main.js manifest.json
