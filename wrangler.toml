@@ -1,4 +1,4 @@
-name = "line-to-obsidian"
+name = "obsidian-line-plugin"
 main = "packages/cloudflare-worker/src/worker.ts"
 compatibility_date = "2024-09-23"
 
