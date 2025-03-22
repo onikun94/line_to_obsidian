@@ -32,14 +32,13 @@ export default class LinePlugin extends Plugin {
     // 同期コマンドの追加
     this.addCommand({
       id: 'sync-line-messages',
-      name: 'Sync LINE Messages',
+      name: 'Sync LINE messages',
       callback: async () => {
         await this.syncMessages();
       },
     });
 
-    // リボンアイコンの追加
-    this.addRibbonIcon('refresh-cw', 'Sync LINE Messages', async () => {
+    this.addRibbonIcon('refresh-cw', 'Sync LINE messages', async () => {
       await this.syncMessages();
     });
   }
@@ -169,8 +168,8 @@ class LineSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', {text: 'LINE Integration Settings'});
 
     new Setting(containerEl)
-      .setName('Note Folder Path')
-      .setDesc('Folder path where LINE messages will be saved')
+      .setName('Note folder path')
+      .setDesc('LINEメッセージが保存されるフォルダパス')
       .addText(text => text
         .setPlaceholder('LINE')
         .setValue(this.plugin.settings.noteFolderPath)
@@ -181,7 +180,7 @@ class LineSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Vault ID')
-      .setDesc('Unique identifier for this Obsidian vault (required for deployment)')
+      .setDesc('このObsidian Vault用の一意の識別子（任意のユニークなIDを作成してください）')
       .addText(text => text
         .setPlaceholder('Enter vault ID')
         .setValue(this.plugin.settings.vaultId)
@@ -191,7 +190,7 @@ class LineSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('LINE User ID')
+      .setName('LINE user ID')
       .setDesc('LINEボットとの会話で取得したユーザーIDを入力してください')
       .addText(text => text
         .setPlaceholder('Enter your LINE User ID')
@@ -202,13 +201,12 @@ class LineSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('Register Mapping')
+      .setName('Register mapping')
       .setDesc('LINE UserIDとVault IDのマッピングを登録します')
       .addButton(button => button
         .setButtonText('Register')
         .onClick(async () => {
           await this.plugin.registerMapping();
         }));
-
   }
 }
