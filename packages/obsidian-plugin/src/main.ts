@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath } from 'obsidian';
 import { requestUrl } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
 
@@ -106,17 +106,16 @@ export default class LinePlugin extends Plugin {
         this.log(`Processing message: ${message.messageId}`);
 
         try {
-          // ファイルが既に存在するかチェック
-          const exists = await this.app.vault.adapter.exists(filePath);
+          const normalizedFilePath = normalizePath(filePath);
+          const exists = await this.app.vault.adapter.exists(normalizedFilePath);
           if (exists) {
             this.log(`File already exists: ${filePath}`);
             continue;
           }
 
-          // フォルダが存在しない場合は作成
-          if (!(await this.app.vault.adapter.exists(this.settings.noteFolderPath))) {
-            await this.app.vault.createFolder(this.settings.noteFolderPath);
-            this.log(`Created folder: ${this.settings.noteFolderPath}`);
+          const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
+          if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
+            await this.app.vault.createFolder(normalizedFolderPath);
           }
 
           // ノートの内容を作成
@@ -131,8 +130,7 @@ export default class LinePlugin extends Plugin {
             `${message.text}`
           ].join('\n');
 
-          // ノートを保存
-          await this.app.vault.create(filePath, content);
+          await this.app.vault.create(normalizedFilePath, content);
           newMessageCount++;
           this.log(`Created note: ${filePath}`);
         } catch (err) {
