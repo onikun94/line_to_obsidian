@@ -171,7 +171,8 @@ app.post('/webhook', async (c: Context) => {
         // KVストアにメッセージを保存
         await c.env.LINE_MESSAGES.put(
           `${vaultId}/${event.message.id}`,
-          JSON.stringify(message)
+          JSON.stringify(message),
+          { expirationTtl: 60 * 60 * 24 * 10 }
         );
         
         console.log(`Saved message: ${event.message.id} for vault: ${vaultId}`);
