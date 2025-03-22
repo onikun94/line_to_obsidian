@@ -44,13 +44,6 @@ export default class LinePlugin extends Plugin {
     });
   }
 
-  private log(message: string, error?: Error) {
-    console.log(`[LINE Plugin] ${message}`);
-    if (error) {
-      console.error(error);
-    }
-  }
-
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -62,39 +55,29 @@ export default class LinePlugin extends Plugin {
   private async syncMessages() {
     if (!this.settings.vaultId) {
       new Notice('Vault ID not configured. Please set it in plugin settings.');
-      this.log('Missing Vault ID');
       return;
     }
 
     try {
       new Notice('Syncing LINE messages...');
-      this.log('Starting sync process...');
       
-      // Cloudflare Workersからメッセージを取得
       const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId);
-      this.log(`Fetching messages from: ${url}`);
       
       const response = await requestUrl({
         url: url,
         method: 'GET',
       });
-      this.log(`Response status: ${response.status}`);
       
       if (response.status !== 200) {
-        const errorText = response.text;
-        this.log(`Error response body: ${errorText}`);
         throw new Error(`Failed to fetch messages: ${response.status}`);
       }
 
       const responseText = response.text;
-      this.log(`Response body: ${responseText}`);
       
       let messages: LineMessage[];
       try {
         messages = JSON.parse(responseText) as LineMessage[];
-        this.log(`Parsed ${messages.length} messages`);
       } catch (parseError) {
-        this.log('Failed to parse response as JSON', parseError as Error);
         throw new Error('Invalid response format');
       }
 
@@ -103,13 +86,11 @@ export default class LinePlugin extends Plugin {
       for (const message of messages) {
         const fileName = `${new Date(message.timestamp).toISOString().split('T')[0]}-${message.messageId}.md`;
         const filePath = `${this.settings.noteFolderPath}/${fileName}`;
-        this.log(`Processing message: ${message.messageId}`);
 
         try {
           const normalizedFilePath = normalizePath(filePath);
           const exists = await this.app.vault.adapter.exists(normalizedFilePath);
           if (exists) {
-            this.log(`File already exists: ${filePath}`);
             continue;
           }
 
@@ -132,15 +113,13 @@ export default class LinePlugin extends Plugin {
 
           await this.app.vault.create(normalizedFilePath, content);
           newMessageCount++;
-          this.log(`Created note: ${filePath}`);
         } catch (err) {
-          this.log(`Error processing message ${message.messageId}`, err as Error);
+          console.error(`Error processing message ${message.messageId}: ${err}`);
         }
       }
       
       new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
     } catch (err) {
-      this.log('Error syncing messages', err as Error);
       new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
@@ -171,7 +150,6 @@ export default class LinePlugin extends Plugin {
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
     } catch (error) {
       new Notice(`マッピングの登録に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      this.log('Error registering mapping', error as Error);
     }
   }
 }
