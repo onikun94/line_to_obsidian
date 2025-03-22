@@ -6,9 +6,9 @@ import * as line from '@line/bot-sdk';
 interface Bindings {
   LINE_CHANNEL_ACCESS_TOKEN: string;
   LINE_CHANNEL_SECRET: string;
-  LINE_MESSAGES: KVNamespace;  // KVストア
-  LINE_USER_MAPPINGS: KVNamespace;  // LINE UserIDとVault IDのマッピング用KVストア
-  NOTE_FOLDER_PATH: string;  // ノートの保存先フォルダ
+  LINE_MESSAGES: KVNamespace;
+  LINE_USER_MAPPINGS: KVNamespace;
+  NOTE_FOLDER_PATH: string;
   [key: string]: string | KVNamespace;
 }
 
@@ -22,7 +22,6 @@ interface LineMessage {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// CORSミドルウェアを追加
 app.use('*', cors({
   origin: 'app://obsidian.md',
   allowMethods: ['GET', 'POST'],
@@ -31,7 +30,6 @@ app.use('*', cors({
   maxAge: 86400,
 }));
 
-// エラーハンドリングミドルウェア
 app.use('*', async (c, next) => {
   try {
     await next();
@@ -44,16 +42,13 @@ app.use('*', async (c, next) => {
   }
 });
 
-// ヘルスチェックエンドポイント
 app.get('/health', (c: Context) => c.json({ status: 'ok' }));
 
-// メッセージ一覧取得エンドポイント
 app.get('/messages/:vaultId', async (c: Context) => {
   try {
     const vaultId = c.req.param('vaultId');
     console.log(`Fetching messages for vaultId: ${vaultId}`);
 
-    // KVストアの存在確認
     if (!c.env.LINE_MESSAGES) {
       console.error('LINE_MESSAGES KV namespace is not bound');
       return c.json({ error: 'KV store not configured' }, 500);
@@ -61,7 +56,6 @@ app.get('/messages/:vaultId', async (c: Context) => {
 
     const messages: LineMessage[] = [];
     
-    // KVストアからメッセージを取得
     const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `${vaultId}/` });
     console.log(`Found ${keys.length} messages for vaultId: ${vaultId}`);
 
@@ -87,7 +81,6 @@ app.get('/messages/:vaultId', async (c: Context) => {
   }
 });
 
-// LINE UserIDとVault IDのマッピングを取得
 async function getVaultIdForUser(c: Context, userId: string): Promise<string | null> {
   try {
     return await c.env.LINE_USER_MAPPINGS.get(userId);
@@ -97,7 +90,6 @@ async function getVaultIdForUser(c: Context, userId: string): Promise<string | n
   }
 }
 
-// マッピング設定エンドポイント
 app.post('/mapping', async (c: Context) => {
   try {
     const { userId, vaultId } = await c.req.json();
@@ -116,12 +108,10 @@ app.post('/mapping', async (c: Context) => {
   }
 });
 
-// Webhookエンドポイントの更新
 app.post('/webhook', async (c: Context) => {
   try {
     console.log('Received webhook');
     
-    // 署名の検証
     const signature = c.req.header('x-line-signature');
     if (!signature) {
       return c.json({ error: 'Missing signature' }, 401);
@@ -136,7 +126,6 @@ app.post('/webhook', async (c: Context) => {
     const events = JSON.parse(body).events as line.WebhookEvent[];
     console.log(`Processing ${events.length} events`);
     
-    // メッセージイベントの処理
     for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
         const userId = event.source.userId;
@@ -145,11 +134,9 @@ app.post('/webhook', async (c: Context) => {
           continue;
         }
 
-        // ユーザーのVault IDを取得
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId}`);
-          // LINEユーザーに設定が必要な旨を通知
           const client = new line.Client({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
@@ -168,7 +155,6 @@ app.post('/webhook', async (c: Context) => {
           vaultId: vaultId
         };
 
-        // KVストアにメッセージを保存
         await c.env.LINE_MESSAGES.put(
           `${vaultId}/${event.message.id}`,
           JSON.stringify(message),

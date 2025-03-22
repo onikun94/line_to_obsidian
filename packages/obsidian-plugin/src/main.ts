@@ -4,14 +4,14 @@ import { API_ENDPOINTS } from './constants';
 
 interface LinePluginSettings {
   noteFolderPath: string;
-  vaultId: string;  // Obsidian vaultを識別するためのID
-  lineUserId: string;  // LINE UserID
+  vaultId: string;
+  lineUserId: string;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
   noteFolderPath: 'LINE',
-  vaultId: '',  // デフォルトは空文字列
-  lineUserId: ''  // デフォルトは空文字列
+  vaultId: '',
+  lineUserId: ''
 }
 
 interface LineMessage {
@@ -29,7 +29,6 @@ export default class LinePlugin extends Plugin {
     await this.loadSettings();
     this.addSettingTab(new LineSettingTab(this.app, this));
     
-    // 同期コマンドの追加
     this.addCommand({
       id: 'sync-line-messages',
       name: 'Sync LINE messages',
@@ -98,7 +97,6 @@ export default class LinePlugin extends Plugin {
             await this.app.vault.createFolder(normalizedFolderPath);
           }
 
-          // ノートの内容を作成
           const content = [
             `---`,
             `source: LINE`,
