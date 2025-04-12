@@ -81,8 +81,13 @@ export default class LinePlugin extends Plugin {
       }
 
       let newMessageCount = 0;
+      const syncedMessageIds: string[] = [];
 
       for (const message of messages) {
+        if (message.synced) {
+          continue;
+        }
+
         const fileName = `${new Date(message.timestamp).toISOString().split('T')[0]}-${message.messageId}.md`;
         const filePath = `${this.settings.noteFolderPath}/${fileName}`;
 
@@ -90,6 +95,7 @@ export default class LinePlugin extends Plugin {
           const normalizedFilePath = normalizePath(filePath);
           const exists = await this.app.vault.adapter.exists(normalizedFilePath);
           if (exists) {
+            syncedMessageIds.push(message.messageId);
             continue;
           }
 
@@ -111,14 +117,41 @@ export default class LinePlugin extends Plugin {
 
           await this.app.vault.create(normalizedFilePath, content);
           newMessageCount++;
+          syncedMessageIds.push(message.messageId);
         } catch (err) {
           console.error(`Error processing message ${message.messageId}: ${err}`);
         }
+      }
+
+      if (syncedMessageIds.length > 0) {
+        await this.updateSyncStatus(syncedMessageIds);
       }
       
       new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
     } catch (err) {
       new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  private async updateSyncStatus(messageIds: string[]) {
+    try {
+      const response = await requestUrl({
+        url: API_ENDPOINTS.UPDATE_SYNC_STATUS,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vaultId: this.settings.vaultId,
+          messageIds: messageIds,
+        }),
+      });
+
+      if (response.status !== 200) {
+        console.error(`Failed to update sync status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
