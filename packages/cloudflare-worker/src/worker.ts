@@ -109,6 +109,45 @@ app.post('/mapping', async (c: Context) => {
   }
 });
 
+app.post('/messages/update-sync-status', async (c: Context) => {
+  try {
+    const { vaultId, messageIds } = await c.req.json();
+    
+    if (!vaultId || !messageIds || !Array.isArray(messageIds)) {
+      return c.json({ error: 'Missing vaultId or messageIds' }, 400);
+    }
+
+    console.log(`Updating sync status for ${messageIds.length} messages in vault ${vaultId}`);
+
+    for (const messageId of messageIds) {
+      const key = `${vaultId}/${messageId}`;
+      try {
+        const message = await c.env.LINE_MESSAGES.get(key, 'json') as LineMessage | null;
+        
+        if (message) {
+          message.synced = true;
+          await c.env.LINE_MESSAGES.put(key, JSON.stringify(message), {
+            expirationTtl: 60 * 60 * 24 * 10 // Keep the same expiration
+          });
+          console.log(`Updated sync status for message ${messageId}`);
+        } else {
+          console.warn(`Message ${messageId} not found when updating sync status`);
+        }
+      } catch (err) {
+        console.error(`Error updating sync status for message ${messageId}:`, err);
+      }
+    }
+    
+    return c.json({ status: 'ok', updated: messageIds.length });
+  } catch (err) {
+    console.error('Error in /messages/update-sync-status:', err);
+    return c.json({
+      error: 'Failed to update sync status',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
 app.post('/webhook', async (c: Context) => {
   try {
     console.log('Received webhook');
@@ -153,7 +192,8 @@ app.post('/webhook', async (c: Context) => {
           messageId: event.message.id,
           userId: userId,
           text: event.message.text,
-          vaultId: vaultId
+          vaultId: vaultId,
+          synced: false
         };
 
         await c.env.LINE_MESSAGES.put(
