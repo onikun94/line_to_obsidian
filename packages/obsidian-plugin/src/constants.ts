@@ -4,4 +4,5 @@ export const API_ENDPOINTS = {
   BASE_URL,
   MESSAGES: (vaultId: string): string => `${BASE_URL}/messages/${vaultId}`,
   MAPPING: `${BASE_URL}/mapping`,
+  UPDATE_SYNC_STATUS: `${BASE_URL}/messages/update-sync-status`,
 } as const; 
