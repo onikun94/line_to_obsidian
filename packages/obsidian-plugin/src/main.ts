@@ -20,6 +20,7 @@ interface LineMessage {
   userId: string;
   text: string;
   vaultId: string;
+  synced?: boolean;
 }
 
 export default class LinePlugin extends Plugin {

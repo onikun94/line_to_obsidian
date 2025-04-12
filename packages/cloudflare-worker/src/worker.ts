@@ -18,6 +18,7 @@ interface LineMessage {
   userId: string;
   text: string;
   vaultId: string;
+  synced?: boolean;
 }
 
 const app = new Hono<{ Bindings: Bindings }>();
