@@ -60,7 +60,7 @@ export default class LinePlugin extends Plugin {
     try {
       new Notice('Syncing LINE messages...');
       
-      const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId);
+      const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId, this.settings.lineUserId);
       
       const response = await requestUrl({
         url: url,
@@ -135,6 +135,11 @@ export default class LinePlugin extends Plugin {
 
   private async updateSyncStatus(messageIds: string[]) {
     try {
+      if (!this.settings.lineUserId) {
+        console.error('LINE User ID not configured. Cannot update sync status.');
+        return;
+      }
+
       const response = await requestUrl({
         url: API_ENDPOINTS.UPDATE_SYNC_STATUS,
         method: 'POST',
@@ -144,6 +149,7 @@ export default class LinePlugin extends Plugin {
         body: JSON.stringify({
           vaultId: this.settings.vaultId,
           messageIds: messageIds,
+          userId: this.settings.lineUserId,
         }),
       });
 
