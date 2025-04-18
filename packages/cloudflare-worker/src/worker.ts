@@ -45,20 +45,29 @@ app.use('*', async (c, next) => {
 
 app.get('/health', (c: Context) => c.json({ status: 'ok' }));
 
-app.get('/messages/:vaultId', async (c: Context) => {
+app.get('/messages/:vaultId/:userId', async (c: Context) => {
   try {
     const vaultId = c.req.param('vaultId');
-    console.log(`Fetching messages for vaultId: ${vaultId}`);
+    const userId = c.req.param('userId');
+    
+    if (!userId) {
+      console.error('Missing userId parameter');
+      return c.json({ error: 'Missing userId parameter' }, 400);
+    }
 
     if (!c.env.LINE_MESSAGES) {
       console.error('LINE_MESSAGES KV namespace is not bound');
       return c.json({ error: 'KV store not configured' }, 500);
     }
+    
+    const storedVaultId = await getVaultIdForUser(c, userId);
+    if (!storedVaultId || storedVaultId !== vaultId) {
+      console.error(`Authentication failed: User ${userId} is not authorized for vault ${vaultId}`);
+      return c.json({ error: 'Unauthorized access' }, 403);
+    }
 
     const messages: LineMessage[] = [];
-    
-    const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `${vaultId}/` });
-    console.log(`Found ${keys.length} messages for vaultId: ${vaultId}`);
+    const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `${vaultId}/${userId}/` });
 
     for (const key of keys) {
       try {
@@ -74,9 +83,30 @@ app.get('/messages/:vaultId', async (c: Context) => {
     console.log(`Successfully retrieved ${messages.length} messages`);
     return c.json(messages);
   } catch (err) {
-    console.error('Error in /messages/:vaultId:', err);
+    console.error('Error in /messages/:vaultId/:userId:', err);
     return c.json({
       error: 'Failed to fetch messages',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// 後方互換性のために古いエンドポイントをリダイレクト(Obsidianにリリースされたら削除)
+app.get('/messages/:vaultId', async (c: Context) => {
+  try {
+    const vaultId = c.req.param('vaultId');
+    const userId = c.req.query('userId');
+    
+    if (!userId) {
+      console.error('Missing userId parameter in legacy endpoint');
+      return c.json({ error: 'Missing userId parameter' }, 400);
+    }
+    
+    return c.redirect(`/messages/${vaultId}/${userId}`);
+  } catch (err) {
+    console.error('Error in legacy /messages/:vaultId endpoint:', err);
+    return c.json({
+      error: 'Failed to redirect',
       message: err instanceof Error ? err.message : 'Unknown error'
     }, 500);
   }
@@ -111,16 +141,27 @@ app.post('/mapping', async (c: Context) => {
 
 app.post('/messages/update-sync-status', async (c: Context) => {
   try {
-    const { vaultId, messageIds } = await c.req.json();
+    const body = await c.req.json();
+    const { vaultId, messageIds, userId } = body;
     
     if (!vaultId || !messageIds || !Array.isArray(messageIds)) {
       return c.json({ error: 'Missing vaultId or messageIds' }, 400);
     }
 
+    if (!userId) {
+      return c.json({ error: 'Missing userId' }, 400);
+    }
+    
+    const storedVaultId = await getVaultIdForUser(c, userId);
+    if (!storedVaultId || storedVaultId !== vaultId) {
+      console.error(`Authentication failed: User ${userId} is not authorized for vault ${vaultId}`);
+      return c.json({ error: 'Unauthorized access' }, 403);
+    }
+
     console.log(`Updating sync status for ${messageIds.length} messages in vault ${vaultId}`);
 
     for (const messageId of messageIds) {
-      const key = `${vaultId}/${messageId}`;
+      const key = `${vaultId}/${userId}/${messageId}`;
       try {
         const message = await c.env.LINE_MESSAGES.get(key, 'json') as LineMessage | null;
         
@@ -197,12 +238,12 @@ app.post('/webhook', async (c: Context) => {
         };
 
         await c.env.LINE_MESSAGES.put(
-          `${vaultId}/${event.message.id}`,
+          `${vaultId}/${userId}/${event.message.id}`,
           JSON.stringify(message),
           { expirationTtl: 60 * 60 * 24 * 10 }
         );
         
-        console.log(`Saved message: ${event.message.id} for vault: ${vaultId}`);
+        console.log(`Saved message: ${event.message.id} for vault: ${vaultId} and user: ${userId}`);
       }
     }
     
