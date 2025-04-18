@@ -5,7 +5,6 @@ compatibility_date = "2024-09-23"
 # Node.js互換性フラグ
 compatibility_flags = ["nodejs_compat"]
 
-# KVストアのバインディング
 kv_namespaces = [
   { binding = "LINE_MESSAGES", id = "27d7dbccef1b42fc9e0c4fde1e9fe005" },
   { binding = "LINE_USER_MAPPINGS", id = "65f9de2e1c514dd3aae66f79f6ceb936" }
@@ -15,10 +14,13 @@ kv_namespaces = [
 [observability.logs]
 enabled = true
 
-
 [build]
 command = "pnpm --filter cloudflare-worker build"
 cwd = "."
 
-[vars]
-# 公開しても問題ない環境変数はここに記述できます 
+[env.development]
+name = "line-to-obsidian-dev"
+kv_namespaces = [
+  { binding = "LINE_MESSAGES", id = "d874dd512f06435da9003ca674fdea1e", preview_id = "d874dd512f06435da9003ca674fdea1e" },
+  { binding = "LINE_USER_MAPPINGS", id = "7b0098cda3b145c6bb9675e7e872cc29", preview_id = "7b0098cda3b145c6bb9675e7e872cc29" }
+]

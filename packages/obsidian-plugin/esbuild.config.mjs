@@ -3,7 +3,17 @@ import process from "process";
 import builtins from "builtin-modules";
 import dotenv from 'dotenv';
 
-dotenv.config();
+const isProd = process.env.NODE_ENV === 'production';
+const isCI = process.env.CI === 'true';
+
+if (!isCI && !process.env.OBSIDIAN_LINE_API_URL) {
+  dotenv.config({ path: '.env.local' });
+}
+
+if (isProd && !process.env.OBSIDIAN_LINE_API_URL) {
+  console.warn('\x1b[33m%s\x1b[0m', `警告: 本番環境でOBSIDIAN_LINE_API_URLが設定されていません。
+GitHub Actionsの環境変数でOBSIDIAN_LINE_API_URLを設定してください。`);
+}
 
 const banner =
 `/*
@@ -63,4 +73,4 @@ if (prod) {
   process.exit(0);
 } else {
   await context.watch();
-} 
+}

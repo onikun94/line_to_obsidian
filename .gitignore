@@ -8,6 +8,7 @@ main.js
 # Environment files
 .env
 .env.*
+!.env.sample
 
 # IDE and editor files
 .vscode/
@@ -46,9 +47,6 @@ build/
 
 # Wrangler
 .wrangler/
-
-# Environment variables
-.dev.vars
 
 # OS files
 Thumbs.db 

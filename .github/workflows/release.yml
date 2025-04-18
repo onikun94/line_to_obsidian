@@ -30,6 +30,7 @@ jobs:
       - name: Build plugin
         env:
           OBSIDIAN_LINE_API_URL: ${{ secrets.OBSIDIAN_LINE_API_URL }}
+          NODE_ENV: production
         run: pnpm --filter obsidian-plugin build
 
       - name: Create release
