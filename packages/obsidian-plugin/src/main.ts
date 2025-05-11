@@ -71,6 +71,21 @@ export default class LinePlugin extends Plugin {
     this.setupAutoSync();
   }
 
+  private toJST(timestamp: number): Date {
+    const date = new Date(timestamp);
+    return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  }
+
+  private getJSTDateString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    return jstDate.toISOString().split('T')[0];
+  }
+
+  private getJSTISOString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    return jstDate.toISOString();
+  }
+
   private setupAutoSync() {
     this.clearAutoSync();
 
@@ -134,7 +149,7 @@ export default class LinePlugin extends Plugin {
           continue;
         }
 
-        const fileName = `${new Date(message.timestamp).toISOString().split('T')[0]}-${message.messageId}.md`;
+        const fileName = `${this.getJSTDateString(message.timestamp)}-${message.messageId}.md`;
         const filePath = `${this.settings.noteFolderPath}/${fileName}`;
 
         try {
@@ -153,7 +168,7 @@ export default class LinePlugin extends Plugin {
           const content = [
             `---`,
             `source: LINE`,
-            `date: ${new Date(message.timestamp).toISOString()}`,
+            `date: ${this.getJSTISOString(message.timestamp)}`,
             `messageId: ${message.messageId}`,
             `userId: ${message.userId}`,
             `---`,
