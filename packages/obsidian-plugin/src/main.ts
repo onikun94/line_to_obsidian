@@ -6,12 +6,18 @@ interface LinePluginSettings {
   noteFolderPath: string;
   vaultId: string;
   lineUserId: string;
+  autoSync: boolean;
+  syncInterval: number;
+  syncOnStartup: boolean;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
   noteFolderPath: 'LINE',
   vaultId: '',
-  lineUserId: ''
+  lineUserId: '',
+  autoSync: false,
+  syncInterval: 15,
+  syncOnStartup: false
 }
 
 interface LineMessage {
@@ -25,6 +31,7 @@ interface LineMessage {
 
 export default class LinePlugin extends Plugin {
   settings: LinePluginSettings;
+  syncIntervalId: number | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -41,6 +48,18 @@ export default class LinePlugin extends Plugin {
     this.addRibbonIcon('refresh-cw', 'Sync LINE messages', async () => {
       await this.syncMessages();
     });
+
+    this.setupAutoSync();
+    
+    if (this.settings.syncOnStartup) {
+      setTimeout(() => {
+        this.syncMessages(true);
+      }, 3000);
+    }
+  }
+
+  onunload() {
+    this.clearAutoSync();
   }
 
   async loadSettings() {
@@ -49,16 +68,58 @@ export default class LinePlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.setupAutoSync();
   }
 
-  private async syncMessages() {
+  private toJST(timestamp: number): Date {
+    const date = new Date(timestamp);
+    return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  }
+
+  private getJSTDateString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    return jstDate.toISOString().split('T')[0];
+  }
+
+  private getJSTISOString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    return jstDate.toISOString();
+  }
+
+  private setupAutoSync() {
+    this.clearAutoSync();
+
+    if (this.settings.autoSync) {
+      const interval = Math.max(5, this.settings.syncInterval);
+      
+      const intervalMs = interval * 60 * 1000;
+      
+      this.syncIntervalId = window.setInterval(() => {
+        this.syncMessages(true);
+      }, intervalMs);
+      
+      console.log(`自動同期が有効化されました。間隔: ${interval}分`);
+    }
+  }
+
+  private clearAutoSync() {
+    if (this.syncIntervalId !== null) {
+      window.clearInterval(this.syncIntervalId);
+      this.syncIntervalId = null;
+      console.log('自動同期が無効化されました');
+    }
+  }
+
+  private async syncMessages(isAutoSync = false) {
     if (!this.settings.vaultId) {
       new Notice('Vault ID not configured. Please set it in plugin settings.');
       return;
     }
 
     try {
-      new Notice('Syncing LINE messages...');
+      if (!isAutoSync) {
+        new Notice('Syncing LINE messages...');
+      }
       
       const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId, this.settings.lineUserId);
       
@@ -88,7 +149,7 @@ export default class LinePlugin extends Plugin {
           continue;
         }
 
-        const fileName = `${new Date(message.timestamp).toISOString().split('T')[0]}-${message.messageId}.md`;
+        const fileName = `${this.getJSTDateString(message.timestamp)}-${message.messageId}.md`;
         const filePath = `${this.settings.noteFolderPath}/${fileName}`;
 
         try {
@@ -107,7 +168,7 @@ export default class LinePlugin extends Plugin {
           const content = [
             `---`,
             `source: LINE`,
-            `date: ${new Date(message.timestamp).toISOString()}`,
+            `date: ${this.getJSTISOString(message.timestamp)}`,
             `messageId: ${message.messageId}`,
             `userId: ${message.userId}`,
             `---`,
@@ -127,7 +188,9 @@ export default class LinePlugin extends Plugin {
         await this.updateSyncStatus(syncedMessageIds);
       }
       
-      new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
+      if (newMessageCount > 0 || !isAutoSync) {
+        new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
+      }
     } catch (err) {
       new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
@@ -235,6 +298,46 @@ class LineSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.lineUserId)
         .onChange(async (value) => {
           this.plugin.settings.lineUserId = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Auto sync')
+      .setDesc('LINEメッセージを自動的に同期するかどうか')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.autoSync)
+        .onChange(async (value) => {
+          this.plugin.settings.autoSync = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Sync interval')
+      .setDesc('LINEメッセージを同期する間隔（分単位、最小5分）')
+      .addText(text => text
+        .setPlaceholder('15')
+        .setValue(this.plugin.settings.syncInterval.toString())
+        .onChange(async (value) => {
+          const interval = parseInt(value);
+          if (!isNaN(interval) && interval > 0) {
+            if (interval < 5) {
+              new Notice('同期間隔は最小5分以上である必要があります');
+              text.setValue('5');
+              this.plugin.settings.syncInterval = 5;
+            } else {
+              this.plugin.settings.syncInterval = interval;
+            }
+            await this.plugin.saveSettings();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName('Sync on startup')
+      .setDesc('Obsidian起動時にLINEメッセージを同期するかどうか')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.syncOnStartup)
+        .onChange(async (value) => {
+          this.plugin.settings.syncOnStartup = value;
           await this.plugin.saveSettings();
         }));
 
