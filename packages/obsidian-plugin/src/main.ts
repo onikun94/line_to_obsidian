@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   vaultId: '',
   lineUserId: '',
   autoSync: false,
-  syncInterval: 15,
+  syncInterval: 2,
   syncOnStartup: false
 }
 
@@ -90,15 +90,15 @@ export default class LinePlugin extends Plugin {
     this.clearAutoSync();
 
     if (this.settings.autoSync) {
-      const interval = Math.max(5, this.settings.syncInterval);
+      const interval = Math.max(1, Math.min(5, this.settings.syncInterval));
       
-      const intervalMs = interval * 60 * 1000;
+      const intervalMs = interval * 60 * 60 * 1000;
       
       this.syncIntervalId = window.setInterval(() => {
         this.syncMessages(true);
       }, intervalMs);
       
-      console.log(`自動同期が有効化されました。間隔: ${interval}分`);
+      console.log(`自動同期が有効化されました。間隔: ${interval}時間`);
     }
   }
 
@@ -301,7 +301,7 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
+    const autoSyncSetting = new Setting(containerEl)
       .setName('Auto sync')
       .setDesc('LINEメッセージを自動的に同期するかどうか')
       .addToggle(toggle => toggle
@@ -309,27 +309,30 @@ class LineSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.autoSync = value;
           await this.plugin.saveSettings();
+          
+          syncIntervalSetting.settingEl.toggle(value);
         }));
 
-    new Setting(containerEl)
+    const syncIntervalSetting = new Setting(containerEl)
       .setName('Sync interval')
-      .setDesc('LINEメッセージを同期する間隔（分単位、最小5分）')
-      .addText(text => text
-        .setPlaceholder('15')
-        .setValue(this.plugin.settings.syncInterval.toString())
-        .onChange(async (value) => {
+      .setDesc('LINEメッセージを同期する間隔（時間単位）')
+      .addDropdown(dropdown => {
+        const hours = [1, 2, 3, 4, 5];
+        hours.forEach(hour => {
+          dropdown.addOption(hour.toString(), `${hour}時間`);
+        });
+        
+        dropdown.setValue(this.plugin.settings.syncInterval.toString())
+        dropdown.onChange(async (value) => {
           const interval = parseInt(value);
-          if (!isNaN(interval) && interval > 0) {
-            if (interval < 5) {
-              new Notice('同期間隔は最小5分以上である必要があります');
-              text.setValue('5');
-              this.plugin.settings.syncInterval = 5;
-            } else {
-              this.plugin.settings.syncInterval = interval;
-            }
+          if (!isNaN(interval) && interval >= 1 && interval <= 5) {
+            this.plugin.settings.syncInterval = interval;
             await this.plugin.saveSettings();
           }
-        }));
+        });
+      });
+    
+    syncIntervalSetting.settingEl.toggle(this.plugin.settings.autoSync);
 
     new Setting(containerEl)
       .setName('Sync on startup')
