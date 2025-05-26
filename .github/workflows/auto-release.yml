@@ -71,7 +71,10 @@ jobs:
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: プラグインのビルド
-        run: pnpm build
+        env:
+          OBSIDIAN_LINE_API_URL: ${{ secrets.OBSIDIAN_LINE_API_URL }}
+          NODE_ENV: production
+        run: pnpm --filter obsidian-plugin build
 
       - name: 変更をプッシュ
         run: |
@@ -84,9 +87,9 @@ jobs:
 
       - name: リリースファイルの準備
         run: |
-          mkdir obsidian-local-rss
-          cp main.js manifest.json styles.css README.md obsidian-local-rss/
-          zip -r obsidian-local-rss.zip obsidian-local-rss
+          mkdir obsidian-line
+          cp main.js manifest.json styles.css README.md obsidian-line/
+          zip -r obsidian-line.zip obsidian-line
 
       - name: GitHubリリースの作成
         env:
