@@ -1,7 +1,7 @@
 {
   "name": "obsidian-line",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.2.1",
   "description": "LINE integration for Obsidian",
   "workspaces": [
     "packages/*"
@@ -9,7 +9,11 @@
   "scripts": {
     "build": "pnpm --filter obsidian-plugin build",
     "dev": "pnpm --filter obsidian-plugin dev",
-    "deploy": "pnpm --filter cloudflare-worker deploy"
+    "deploy": "pnpm --filter cloudflare-worker deploy",
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"release:patch": "pnpm version patch && git push && git push --tags",
+		"release:minor": "pnpm version minor && git push && git push --tags",
+		"release:major": "pnpm version major && git push && git push --tags"
   },
   "keywords": [],
   "author": "",
