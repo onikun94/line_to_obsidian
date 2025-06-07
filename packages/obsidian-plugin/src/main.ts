@@ -9,6 +9,7 @@ interface LinePluginSettings {
   autoSync: boolean;
   syncInterval: number;
   syncOnStartup: boolean;
+  organizeByDate: boolean;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -17,7 +18,8 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   lineUserId: '',
   autoSync: false,
   syncInterval: 2,
-  syncOnStartup: false
+  syncOnStartup: false,
+  organizeByDate: false
 }
 
 interface LineMessage {
@@ -149,8 +151,16 @@ export default class LinePlugin extends Plugin {
           continue;
         }
 
-        const fileName = `${this.getJSTDateString(message.timestamp)}-${message.messageId}.md`;
-        const filePath = `${this.settings.noteFolderPath}/${fileName}`;
+        const dateString = this.getJSTDateString(message.timestamp);
+        const fileName = `${dateString}-${message.messageId}.md`;
+        
+        let filePath: string;
+        if (this.settings.organizeByDate) {
+          const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
+          filePath = `${dateFolderPath}/${fileName}`;
+        } else {
+          filePath = `${this.settings.noteFolderPath}/${fileName}`;
+        }
 
         try {
           const normalizedFilePath = normalizePath(filePath);
@@ -163,6 +173,14 @@ export default class LinePlugin extends Plugin {
           const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
           if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
             await this.app.vault.createFolder(normalizedFolderPath);
+          }
+
+          if (this.settings.organizeByDate) {
+            const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
+            const normalizedDateFolderPath = normalizePath(dateFolderPath);
+            if (!(await this.app.vault.adapter.exists(normalizedDateFolderPath))) {
+              await this.app.vault.createFolder(normalizedDateFolderPath);
+            }
           }
 
           const content = [
@@ -341,6 +359,16 @@ class LineSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.syncOnStartup)
         .onChange(async (value) => {
           this.plugin.settings.syncOnStartup = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Organize by date')
+      .setDesc('日付ごとにフォルダを作成してメッセージを整理するかどうか')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.organizeByDate)
+        .onChange(async (value) => {
+          this.plugin.settings.organizeByDate = value;
           await this.plugin.saveSettings();
         }));
 
