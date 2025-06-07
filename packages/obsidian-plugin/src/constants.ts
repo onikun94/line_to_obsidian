@@ -9,7 +9,12 @@ if (!BASE_URL) {
 
 export const API_ENDPOINTS = {
   BASE_URL,
-  MESSAGES: (vaultId: string, userId: string): string => `${BASE_URL}/messages/${vaultId}/${userId}`,
+  MESSAGES: (vaultId: string, userId: string): string => {
+    if (!vaultId || !userId) {
+      throw new Error('vaultIdとuserIdは必須パラメータです');
+    }
+    return `${BASE_URL}/messages/${vaultId}/${userId}`;
+  },
   MAPPING: `${BASE_URL}/mapping`,
   UPDATE_SYNC_STATUS: `${BASE_URL}/messages/update-sync-status`,
 } as const; 
