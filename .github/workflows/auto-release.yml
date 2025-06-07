@@ -12,10 +12,6 @@ on:
           - patch
           - minor
           - major
-      release_notes:
-        description: 'リリースノート（オプション）'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -48,6 +44,7 @@ jobs:
           git config --local user.name "GitHub Action"
 
       - name: バージョン更新とコミット
+        id: version_update
         run: |
           # 現在のバージョンを取得
           CURRENT_VERSION=$(node -p "require('./package.json').version")
@@ -69,6 +66,7 @@ jobs:
           
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: プラグインのビルド
         env:
@@ -82,8 +80,8 @@ jobs:
 
       - name: タグ作成とプッシュ
         run: |
-          git tag ${{ env.NEW_VERSION }}
-          git push origin ${{ env.NEW_VERSION }}
+          git tag ${{ steps.version_update.outputs.new_version }}
+          git push origin ${{ steps.version_update.outputs.new_version }}
 
       - name: リリースファイルの準備
         run: |
@@ -95,19 +93,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
-          if [ -z "$RELEASE_NOTES" ]; then
-            RELEASE_NOTES="バージョン ${{ env.NEW_VERSION }} のリリース"
-          fi
-          
-          gh release create "${{ env.NEW_VERSION }}" \
-            --title="${{ env.NEW_VERSION }}" \
-            --notes="$RELEASE_NOTES" \
+          gh release create "${{ steps.version_update.outputs.new_version }}" \
+            --title="${{ steps.version_update.outputs.new_version }}" \
+            --generate-notes \
             ${{ github.event.repository.name }}.zip \
             packages/obsidian-plugin/main.js \
             manifest.json \
 
       - name: リリース完了通知
         run: |
-          echo "🎉 リリース ${{ env.NEW_VERSION }} が正常に作成されました！"
-          echo "リリースページ: https://github.com/${{ github.repository }}/releases/tag/${{ env.NEW_VERSION }}" 
+          echo "🎉 リリース ${{ steps.version_update.outputs.new_version }} が正常に作成されました！"
+          echo "リリースページ: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version_update.outputs.new_version }}" 
