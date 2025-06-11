@@ -142,6 +142,27 @@ export default class LinePlugin extends Plugin {
     return fileName;
   }
 
+  private async generateUniqueFileName(message: LineMessage, folderPath: string): Promise<string> {
+    const baseFileName = this.generateFileName(message);
+    const baseName = baseFileName.replace(/\.md$/, '');
+    const extension = '.md';
+    
+    let uniqueFileName = baseFileName;
+    let counter = 1;
+    
+    while (true) {
+      const fullPath = normalizePath(`${folderPath}/${uniqueFileName}`);
+      const exists = await this.app.vault.adapter.exists(fullPath);
+      
+      if (!exists) {
+        return uniqueFileName;
+      }
+      
+      uniqueFileName = `${baseName}_${counter}${extension}`;
+      counter++;
+    }
+  }
+
   private setupAutoSync() {
     this.clearAutoSync();
 
@@ -205,37 +226,27 @@ export default class LinePlugin extends Plugin {
           continue;
         }
 
-        const fileName = this.generateFileName(message);
-        
-        let filePath: string;
+        let folderPath: string;
         if (this.settings.organizeByDate) {
           const dateString = this.getJSTDateString(message.timestamp);
-          const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
-          filePath = `${dateFolderPath}/${fileName}`;
+          folderPath = `${this.settings.noteFolderPath}/${dateString}`;
         } else {
-          filePath = `${this.settings.noteFolderPath}/${fileName}`;
+          folderPath = this.settings.noteFolderPath;
         }
 
         try {
+          const fileName = await this.generateUniqueFileName(message, folderPath);
+          const filePath = `${folderPath}/${fileName}`;
           const normalizedFilePath = normalizePath(filePath);
-          const exists = await this.app.vault.adapter.exists(normalizedFilePath);
-          if (exists) {
-            syncedMessageIds.push(message.messageId);
-            continue;
-          }
 
           const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
           if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
             await this.app.vault.createFolder(normalizedFolderPath);
           }
 
-          if (this.settings.organizeByDate) {
-            const dateString = this.getJSTDateString(message.timestamp);
-            const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
-            const normalizedDateFolderPath = normalizePath(dateFolderPath);
-            if (!(await this.app.vault.adapter.exists(normalizedDateFolderPath))) {
-              await this.app.vault.createFolder(normalizedDateFolderPath);
-            }
+          const normalizedTargetFolderPath = normalizePath(folderPath);
+          if (!(await this.app.vault.adapter.exists(normalizedTargetFolderPath))) {
+            await this.app.vault.createFolder(normalizedTargetFolderPath);
           }
 
           const content = [
