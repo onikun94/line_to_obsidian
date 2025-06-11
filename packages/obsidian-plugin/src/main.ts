@@ -10,6 +10,7 @@ interface LinePluginSettings {
   syncInterval: number;
   syncOnStartup: boolean;
   organizeByDate: boolean;
+  fileNameTemplate: string;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -19,7 +20,8 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   autoSync: false,
   syncInterval: 2,
   syncOnStartup: false,
-  organizeByDate: false
+  organizeByDate: false,
+  fileNameTemplate: '{date}-{messageId}'
 }
 
 interface LineMessage {
@@ -74,11 +76,15 @@ export default class LinePlugin extends Plugin {
   }
 
   private toJST(timestamp: number): Date {
-    const date = new Date(timestamp);
-    return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    return new Date(timestamp);
   }
 
   private getJSTDateString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    return jstDate.toISOString().split('T')[0].replace(/-/g, '');
+  }
+
+  private getJSTDateWithHyphens(timestamp: number): string {
     const jstDate = this.toJST(timestamp);
     return jstDate.toISOString().split('T')[0];
   }
@@ -86,6 +92,54 @@ export default class LinePlugin extends Plugin {
   private getJSTISOString(timestamp: number): string {
     const jstDate = this.toJST(timestamp);
     return jstDate.toISOString();
+  }
+
+  private getJSTTimeForFileName(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    const year = jstDate.getFullYear();
+    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
+    const day = String(jstDate.getDate()).padStart(2, '0');
+    const hour = String(jstDate.getHours()).padStart(2, '0');
+    const minute = String(jstDate.getMinutes()).padStart(2, '0');
+    const second = String(jstDate.getSeconds()).padStart(2, '0');
+    
+    return `${year}${month}${day}${hour}${minute}${second}`;
+  }
+
+  private getTimeOnly(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    const hour = String(jstDate.getHours()).padStart(2, '0');
+    const minute = String(jstDate.getMinutes()).padStart(2, '0');
+    const second = String(jstDate.getSeconds()).padStart(2, '0');
+    
+    return `${hour}${minute}${second}`;
+  }
+
+  private generateFileName(message: LineMessage): string {
+    const template = this.settings.fileNameTemplate;
+    const timestamp = message.timestamp;
+    
+    const variables = {
+      '{date}': this.getJSTDateWithHyphens(timestamp),
+      '{datecompact}': this.getJSTDateString(timestamp),
+      '{time}': this.getTimeOnly(timestamp),
+      '{datetime}': this.getJSTTimeForFileName(timestamp),
+      '{messageId}': message.messageId,
+      '{userId}': message.userId,
+      '{timestamp}': timestamp.toString()
+    };
+
+    let fileName = template;
+    for (const [variable, value] of Object.entries(variables)) {
+      fileName = fileName.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value);
+    }
+
+    // .mdが含まれていない場合は追加
+    if (!fileName.endsWith('.md')) {
+      fileName += '.md';
+    }
+
+    return fileName;
   }
 
   private setupAutoSync() {
@@ -151,11 +205,11 @@ export default class LinePlugin extends Plugin {
           continue;
         }
 
-        const dateString = this.getJSTDateString(message.timestamp);
-        const fileName = `${dateString}-${message.messageId}.md`;
+        const fileName = this.generateFileName(message);
         
         let filePath: string;
         if (this.settings.organizeByDate) {
+          const dateString = this.getJSTDateString(message.timestamp);
           const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
           filePath = `${dateFolderPath}/${fileName}`;
         } else {
@@ -176,6 +230,7 @@ export default class LinePlugin extends Plugin {
           }
 
           if (this.settings.organizeByDate) {
+            const dateString = this.getJSTDateString(message.timestamp);
             const dateFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
             const normalizedDateFolderPath = normalizePath(dateFolderPath);
             if (!(await this.app.vault.adapter.exists(normalizedDateFolderPath))) {
@@ -371,6 +426,31 @@ class LineSettingTab extends PluginSettingTab {
           this.plugin.settings.organizeByDate = value;
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName('File name template')
+      .setDesc('ファイル名のテンプレート（.md拡張子は自動で付与されます）。利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}')
+      .addText(text => text
+        .setPlaceholder('{date}-{messageId}')
+        .setValue(this.plugin.settings.fileNameTemplate)
+        .onChange(async (value) => {
+          this.plugin.settings.fileNameTemplate = value || '{date}-{messageId}';
+          await this.plugin.saveSettings();
+        }));
+
+    containerEl.createEl('div', {
+      text: '変数の説明:',
+      cls: 'setting-item-description'
+    });
+    containerEl.createEl('ul', {}, (ul) => {
+      ul.createEl('li', {text: '{date}: 日付 (例: 2024-01-15)'});
+      ul.createEl('li', {text: '{datecompact}: 日付（ハイフンなし） (例: 20240115)'});
+      ul.createEl('li', {text: '{time}: 時刻 (例: 103045)'});
+      ul.createEl('li', {text: '{datetime}: 日時 (例: 20240115103045)'});
+      ul.createEl('li', {text: '{messageId}: メッセージID'});
+      ul.createEl('li', {text: '{userId}: ユーザーID'});
+      ul.createEl('li', {text: '{timestamp}: Unixタイムスタンプ'});
+    });
 
     new Setting(containerEl)
       .setName('Register mapping')
