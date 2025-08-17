@@ -1,6 +1,9 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath } from 'obsidian';
 import { requestUrl } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
+import { KeyManager } from './crypto/keyManager';
+import { MessageEncryptor } from './crypto/messageEncryptor';
+import { E2EEErrorHandler } from './crypto/errorHandler';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -11,6 +14,8 @@ interface LinePluginSettings {
   syncOnStartup: boolean;
   organizeByDate: boolean;
   fileNameTemplate: string;
+  e2eeEnabled: boolean;
+  apiUrl?: string;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -21,7 +26,8 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   syncInterval: 2,
   syncOnStartup: false,
   organizeByDate: false,
-  fileNameTemplate: '{date}-{messageId}'
+  fileNameTemplate: '{date}-{messageId}',
+  e2eeEnabled: true  // デフォルトで有効
 }
 
 interface LineMessage {
@@ -31,16 +37,39 @@ interface LineMessage {
   text: string;
   vaultId: string;
   synced?: boolean;
+  encrypted?: boolean;
+  encryptedContent?: string;
+  encryptedAESKey?: string;
+  iv?: string;
+  senderKeyId?: string;
+  recipientUserId?: string;
+  version?: string;
 }
 
 export default class LinePlugin extends Plugin {
   settings: LinePluginSettings;
   syncIntervalId: number | null = null;
+  keyManager: KeyManager;
+  messageEncryptor: MessageEncryptor;
+  errorHandler: E2EEErrorHandler;
 
   async onload() {
     await this.loadSettings();
+
+    this.keyManager = new KeyManager(this);
+    this.messageEncryptor = new MessageEncryptor(this.keyManager);
+    this.errorHandler = new E2EEErrorHandler(this.keyManager, this.messageEncryptor);
+
+    if (this.settings.lineUserId && this.settings.vaultId) {
+      try {
+        await this.keyManager.initialize();
+      } catch (error) {
+        console.error('Failed to initialize E2EE:', error);
+      }
+    }
+
     this.addSettingTab(new LineSettingTab(this.app, this));
-    
+
     this.addCommand({
       id: 'sync-line-messages',
       name: 'Sync LINE messages',
@@ -54,7 +83,7 @@ export default class LinePlugin extends Plugin {
     });
 
     this.setupAutoSync();
-    
+
     if (this.settings.syncOnStartup) {
       setTimeout(() => {
         this.syncMessages(true);
@@ -67,7 +96,8 @@ export default class LinePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = await this.loadData() || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
   }
 
   async saveSettings() {
@@ -102,7 +132,7 @@ export default class LinePlugin extends Plugin {
     const hour = String(jstDate.getHours()).padStart(2, '0');
     const minute = String(jstDate.getMinutes()).padStart(2, '0');
     const second = String(jstDate.getSeconds()).padStart(2, '0');
-    
+
     return `${year}${month}${day}${hour}${minute}${second}`;
   }
 
@@ -111,14 +141,14 @@ export default class LinePlugin extends Plugin {
     const hour = String(jstDate.getHours()).padStart(2, '0');
     const minute = String(jstDate.getMinutes()).padStart(2, '0');
     const second = String(jstDate.getSeconds()).padStart(2, '0');
-    
+
     return `${hour}${minute}${second}`;
   }
 
   private generateFileName(message: LineMessage): string {
     const template = this.settings.fileNameTemplate;
     const timestamp = message.timestamp;
-    
+
     const variables = {
       '{date}': this.getJSTDateWithHyphens(timestamp),
       '{datecompact}': this.getJSTDateString(timestamp),
@@ -134,7 +164,6 @@ export default class LinePlugin extends Plugin {
       fileName = fileName.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value);
     }
 
-    // .mdが含まれていない場合は追加
     if (!fileName.endsWith('.md')) {
       fileName += '.md';
     }
@@ -146,18 +175,18 @@ export default class LinePlugin extends Plugin {
     const baseFileName = this.generateFileName(message);
     const baseName = baseFileName.replace(/\.md$/, '');
     const extension = '.md';
-    
+
     let uniqueFileName = baseFileName;
     let counter = 1;
-    
+
     while (true) {
       const fullPath = normalizePath(`${folderPath}/${uniqueFileName}`);
       const exists = await this.app.vault.adapter.exists(fullPath);
-      
+
       if (!exists) {
         return uniqueFileName;
       }
-      
+
       uniqueFileName = `${baseName}_${counter}${extension}`;
       counter++;
     }
@@ -168,14 +197,12 @@ export default class LinePlugin extends Plugin {
 
     if (this.settings.autoSync) {
       const interval = Math.max(1, Math.min(5, this.settings.syncInterval));
-      
+
       const intervalMs = interval * 60 * 60 * 1000;
-      
+
       this.syncIntervalId = window.setInterval(() => {
         this.syncMessages(true);
       }, intervalMs);
-      
-      console.log(`自動同期が有効化されました。間隔: ${interval}時間`);
     }
   }
 
@@ -183,7 +210,6 @@ export default class LinePlugin extends Plugin {
     if (this.syncIntervalId !== null) {
       window.clearInterval(this.syncIntervalId);
       this.syncIntervalId = null;
-      console.log('自動同期が無効化されました');
     }
   }
 
@@ -193,24 +219,34 @@ export default class LinePlugin extends Plugin {
       return;
     }
 
+    const keys = await this.keyManager.loadKeys();
+
+    if (!keys && this.settings.lineUserId) {
+      try {
+        await this.keyManager.initialize();
+      } catch (error) {
+        console.error('Failed to initialize E2EE during sync:', error);
+      }
+    }
+
     try {
       if (!isAutoSync) {
         new Notice('Syncing LINE messages...');
       }
-      
+
       const url = API_ENDPOINTS.MESSAGES(this.settings.vaultId, this.settings.lineUserId);
-      
+
       const response = await requestUrl({
         url: url,
         method: 'GET',
       });
-      
+
       if (response.status !== 200) {
         throw new Error(`Failed to fetch messages: ${response.status}`);
       }
 
       const responseText = response.text;
-      
+
       let messages: LineMessage[];
       try {
         messages = JSON.parse(responseText) as LineMessage[];
@@ -249,6 +285,18 @@ export default class LinePlugin extends Plugin {
             await this.app.vault.createFolder(normalizedTargetFolderPath);
           }
 
+          let messageText: string;
+          try {
+            messageText = await this.messageEncryptor.processMessage(message);
+          } catch (error) {
+            try {
+              messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+            } catch (handlerError) {
+              console.error(`Failed to process message ${message.messageId}:`, handlerError);
+              messageText = message.text || '🔒 暗号化されたメッセージ（復号化できません）';
+            }
+          }
+
           const content = [
             `---`,
             `source: LINE`,
@@ -257,7 +305,7 @@ export default class LinePlugin extends Plugin {
             `userId: ${message.userId}`,
             `---`,
             ``,
-            `${message.text}`
+            `${messageText}`
           ].join('\n');
 
           await this.app.vault.create(normalizedFilePath, content);
@@ -271,7 +319,7 @@ export default class LinePlugin extends Plugin {
       if (syncedMessageIds.length > 0) {
         await this.updateSyncStatus(syncedMessageIds);
       }
-      
+
       if (newMessageCount > 0 || !isAutoSync) {
         new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
       }
@@ -331,6 +379,12 @@ export default class LinePlugin extends Plugin {
         throw new Error('マッピングの登録に失敗しました');
       }
 
+      try {
+        await this.keyManager.initialize();
+      } catch (keyError) {
+        console.error('Failed to initialize keys after mapping:', keyError);
+      }
+
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
     } catch (error) {
       new Notice(`マッピングの登録に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -347,10 +401,10 @@ class LineSettingTab extends PluginSettingTab {
   }
 
   display(): void {
-    const {containerEl} = this;
+    const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', {text: 'LINE Integration Settings'});
+    containerEl.createEl('h2', { text: 'LINE Integration Settings' });
 
     new Setting(containerEl)
       .setName('Note folder path')
@@ -393,7 +447,7 @@ class LineSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.autoSync = value;
           await this.plugin.saveSettings();
-          
+
           syncIntervalSetting.settingEl.toggle(value);
         }));
 
@@ -405,7 +459,7 @@ class LineSettingTab extends PluginSettingTab {
         hours.forEach(hour => {
           dropdown.addOption(hour.toString(), `${hour}時間`);
         });
-        
+
         dropdown.setValue(this.plugin.settings.syncInterval.toString())
         dropdown.onChange(async (value) => {
           const interval = parseInt(value);
@@ -415,7 +469,7 @@ class LineSettingTab extends PluginSettingTab {
           }
         });
       });
-    
+
     syncIntervalSetting.settingEl.toggle(this.plugin.settings.autoSync);
 
     new Setting(containerEl)
@@ -454,13 +508,13 @@ class LineSettingTab extends PluginSettingTab {
       cls: 'setting-item-description'
     });
     containerEl.createEl('ul', {}, (ul) => {
-      ul.createEl('li', {text: '{date}: 日付 (例: 2024-01-15)'});
-      ul.createEl('li', {text: '{datecompact}: 日付（ハイフンなし） (例: 20240115)'});
-      ul.createEl('li', {text: '{time}: 時刻 (例: 103045)'});
-      ul.createEl('li', {text: '{datetime}: 日時 (例: 20240115103045)'});
-      ul.createEl('li', {text: '{messageId}: メッセージID'});
-      ul.createEl('li', {text: '{userId}: ユーザーID'});
-      ul.createEl('li', {text: '{timestamp}: Unixタイムスタンプ'});
+      ul.createEl('li', { text: '{date}: 日付 (例: 2024-01-15)' });
+      ul.createEl('li', { text: '{datecompact}: 日付（ハイフンなし） (例: 20240115)' });
+      ul.createEl('li', { text: '{time}: 時刻 (例: 103045)' });
+      ul.createEl('li', { text: '{datetime}: 日時 (例: 20240115103045)' });
+      ul.createEl('li', { text: '{messageId}: メッセージID' });
+      ul.createEl('li', { text: '{userId}: ユーザーID' });
+      ul.createEl('li', { text: '{timestamp}: Unixタイムスタンプ' });
     });
 
     new Setting(containerEl)
