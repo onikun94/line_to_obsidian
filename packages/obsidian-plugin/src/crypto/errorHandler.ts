@@ -35,10 +35,12 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * エラーハンドリングのメインメソッド
+   * Main error handling entry point
    */
   async handleError(error: Error, context: string): Promise<any> {
-    console.error(`E2EE Error in ${context}:`, error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error(`E2EE Error in ${context}:`, error);
+    }
 
     if (error instanceof E2EEError) {
       switch (error.type) {
@@ -66,17 +68,16 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * 鍵が初期化されていない場合の処理
+   * Handles uninitialized key scenarios
    */
   private async handleKeyNotInitialized(): Promise<void> {
-    new Notice('暗号化キーを初期化しています...');
-    
     try {
       await this.keyManager.initialize();
-      new Notice('暗号化キーの初期化が完了しました');
     } catch (error) {
-      console.error('Failed to initialize keys:', error);
-      new Notice('暗号化キーの初期化に失敗しました。設定を確認してください。');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to initialize keys:', error);
+      }
+      new Notice('接続エラーが発生しました。設定を確認してください。');
       throw new E2EEError(
         E2EEErrorType.KEY_GENERATION_FAILED,
         'Failed to initialize encryption keys',
@@ -86,7 +87,7 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * 鍵が見つからない場合の処理
+   * Handles missing key scenarios with retry logic
    */
   private async handleKeyNotFound(error: E2EEError): Promise<void> {
     const userId = this.extractUserIdFromError(error);
@@ -100,10 +101,7 @@ export class E2EEErrorHandler {
     if (attempts < this.MAX_RETRY_ATTEMPTS) {
       this.retryAttempts.set(retryKey, attempts + 1);
       
-      // キャッシュをクリアして再取得を試みる
       this.keyManager.clearPublicKeyForUser(userId);
-      
-      new Notice(`ユーザー ${userId} の公開鍵を再取得しています...`);
       
       try {
         await this.keyManager.getPublicKey(userId);
@@ -123,28 +121,23 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * 復号化失敗時の処理
+   * Handles decryption failures gracefully
    */
   private async handleDecryptionFailed(error: E2EEError): Promise<string> {
-    console.error('Decryption failed:', error);
-    
-    // ユーザーに通知（頻繁に表示されないように工夫）
-    if (!this.hasShownDecryptionError()) {
-      new Notice('一部のメッセージの復号化に失敗しました');
-      this.markDecryptionErrorShown();
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Decryption failed:', error);
     }
-
-    return '🔒 暗号化されたメッセージ（復号化できません）';
+    
+    return '[メッセージを読み込めませんでした]';
   }
 
   /**
-   * 公開鍵取得失敗時の処理
+   * Handles public key fetch failures
    */
   private async handlePublicKeyFetchFailed(error: E2EEError): Promise<void> {
     const userId = this.extractUserIdFromError(error);
     
     if (userId) {
-      // オフラインフラグを設定
       await this.markUserAsOffline(userId);
     }
 
@@ -152,7 +145,7 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * ネットワークエラー時の処理
+   * Handles network-related errors
    */
   private async handleNetworkError(error: E2EEError): Promise<void> {
     new Notice('ネットワークエラーが発生しました。インターネット接続を確認してください。');
@@ -160,16 +153,18 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * 一般的なエラー処理
+   * Handles unexpected errors
    */
   private handleGenericError(error: Error): void {
-    console.error('Unexpected E2EE error:', error);
-    new Notice('暗号化処理中にエラーが発生しました');
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Unexpected E2EE error:', error);
+    }
+    new Notice('処理中にエラーが発生しました');
     throw error;
   }
 
   /**
-   * エラーメッセージからユーザーIDを抽出
+   * Extracts user ID from error messages
    */
   private extractUserIdFromError(error: E2EEError): string | null {
     const match = error.message.match(/user\s+(\w+)/i);
@@ -177,37 +172,36 @@ export class E2EEErrorHandler {
   }
 
   /**
-   * 復号化エラーが表示済みかチェック
+   * Checks if decryption error was recently shown
    */
   private hasShownDecryptionError(): boolean {
-    const lastShown = localStorage.getItem('e2ee_decryption_error_shown');
+    const lastShown = localStorage.getItem('line_plugin_error_shown');
     if (!lastShown) return false;
     
     const lastShownTime = parseInt(lastShown);
     const now = Date.now();
     
-    // 1時間以内に表示済みの場合はtrue
     return now - lastShownTime < 60 * 60 * 1000;
   }
 
   /**
-   * 復号化エラーを表示済みとマーク
+   * Records when decryption error was shown
    */
   private markDecryptionErrorShown(): void {
-    localStorage.setItem('e2ee_decryption_error_shown', Date.now().toString());
+    localStorage.setItem('line_plugin_error_shown', Date.now().toString());
   }
 
   /**
-   * ユーザーをオフラインとマーク
+   * Marks a user as offline in local storage
    */
   private async markUserAsOffline(userId: string): Promise<void> {
-    const offlineUsers = JSON.parse(localStorage.getItem('e2ee_offline_users') || '{}');
+    const offlineUsers = JSON.parse(localStorage.getItem('line_plugin_offline_users') || '{}');
     offlineUsers[userId] = Date.now();
-    localStorage.setItem('e2ee_offline_users', JSON.stringify(offlineUsers));
+    localStorage.setItem('line_plugin_offline_users', JSON.stringify(offlineUsers));
   }
 
   /**
-   * リトライカウンタをリセット
+   * Clears all retry attempt counters
    */
   clearRetryCounters(): void {
     this.retryAttempts.clear();

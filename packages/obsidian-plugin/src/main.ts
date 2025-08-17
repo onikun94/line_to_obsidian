@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   syncOnStartup: false,
   organizeByDate: false,
   fileNameTemplate: '{date}-{messageId}',
-  e2eeEnabled: true  // デフォルトで有効
+  e2eeEnabled: true
 }
 
 interface LineMessage {
@@ -64,7 +64,9 @@ export default class LinePlugin extends Plugin {
       try {
         await this.keyManager.initialize();
       } catch (error) {
-        console.error('Failed to initialize E2EE:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to initialize E2EE:', error);
+        }
       }
     }
 
@@ -225,7 +227,9 @@ export default class LinePlugin extends Plugin {
       try {
         await this.keyManager.initialize();
       } catch (error) {
-        console.error('Failed to initialize E2EE during sync:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to initialize E2EE during sync:', error);
+        }
       }
     }
 
@@ -292,8 +296,10 @@ export default class LinePlugin extends Plugin {
             try {
               messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
             } catch (handlerError) {
-              console.error(`Failed to process message ${message.messageId}:`, handlerError);
-              messageText = message.text || '🔒 暗号化されたメッセージ（復号化できません）';
+              if (process.env.NODE_ENV === 'development') {
+                console.error(`Failed to process message ${message.messageId}:`, handlerError);
+              }
+              messageText = message.text || '[メッセージを読み込めませんでした]';
             }
           }
 

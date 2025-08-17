@@ -43,7 +43,9 @@ export class KeyManager {
           delete data.pendingKeyRegistration;
           await this.plugin.saveData(data);
         } catch (error) {
-          console.error('Failed to complete pending key registration:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to complete pending key registration:', error);
+          }
         }
       }
     }
@@ -170,7 +172,9 @@ export class KeyManager {
         throw new Error(`Failed to register public key: ${response.status}`);
       }
     } catch (error) {
-      console.error('Failed to register public key:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to register public key:', error);
+      }
       await this.plugin.saveData({
         ...await this.plugin.loadData(),
         pendingKeyRegistration: true

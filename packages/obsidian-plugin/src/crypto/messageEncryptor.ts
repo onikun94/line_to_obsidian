@@ -20,23 +20,18 @@ export class MessageEncryptor {
   }
 
   /**
-   * メッセージを暗号化（透過的）
+   * Encrypts a message for a specific recipient
    */
   async encryptMessage(message: string, recipientUserId: string): Promise<EncryptedMessage> {
     try {
-      // 受信者の公開鍵を取得（キャッシュ済みまたは自動取得）
       const recipientPublicKey = await this.keyManager.getPublicKey(recipientUserId);
       
-      // AES鍵を生成
       const aesKey = await CryptoUtils.generateAESKey();
       
-      // メッセージをAESで暗号化
       const { encrypted, iv } = await CryptoUtils.encryptMessage(message, aesKey);
       
-      // AES鍵を受信者の公開鍵で暗号化
       const encryptedAESKey = await CryptoUtils.encryptAESKey(aesKey, recipientPublicKey);
       
-      // 自分の鍵IDを取得
       const keyPair = this.keyManager.getKeyPair();
       const publicKeyPem = await CryptoUtils.exportPublicKey(keyPair.publicKey);
       const senderKeyId = await this.generateKeyId(publicKeyPem);
@@ -51,44 +46,45 @@ export class MessageEncryptor {
         version: this.VERSION
       };
     } catch (error) {
-      console.error('Encryption failed:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Encryption failed:', error);
+      }
       throw new Error('Failed to encrypt message');
     }
   }
 
   /**
-   * メッセージを復号化（透過的）
+   * Decrypts an encrypted message
    */
   async decryptMessage(encryptedMessage: EncryptedMessage): Promise<string> {
     try {
-      // バージョンチェック
       if (encryptedMessage.version !== this.VERSION) {
-        console.warn(`Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`);
+        }
       }
       
-      // 自分の秘密鍵を取得
       const keyPair = this.keyManager.getKeyPair();
       
-      // Base64デコード
       const encryptedContent = CryptoUtils.base64ToArrayBuffer(encryptedMessage.encryptedContent);
       const encryptedAESKey = CryptoUtils.base64ToArrayBuffer(encryptedMessage.encryptedAESKey);
       const iv = new Uint8Array(CryptoUtils.base64ToArrayBuffer(encryptedMessage.iv));
       
-      // AES鍵を復号化
       const aesKey = await CryptoUtils.decryptAESKey(encryptedAESKey, keyPair.privateKey);
       
-      // メッセージを復号化
       const decrypted = await CryptoUtils.decryptMessage(encryptedContent, aesKey, iv);
       
       return decrypted;
     } catch (error) {
-      console.error('Decryption failed:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Decryption failed:', error);
+      }
       throw new Error('Failed to decrypt message');
     }
   }
 
   /**
-   * メッセージが暗号化されているかチェック
+   * Type guard for encrypted messages
    */
   isEncryptedMessage(message: any): message is EncryptedMessage {
     return message &&
@@ -100,7 +96,7 @@ export class MessageEncryptor {
   }
 
   /**
-   * レガシーメッセージとの互換性チェック
+   * Checks for legacy message format compatibility
    */
   isLegacyMessage(message: any): boolean {
     return message &&
@@ -110,12 +106,10 @@ export class MessageEncryptor {
   }
 
   /**
-   * 透過的なメッセージ処理（暗号化/平文を自動判別）
+   * Processes messages transparently regardless of format
    */
   async processMessage(message: any): Promise<string> {
-    // LineMessageの暗号化フィールドをチェック
     if (message.encrypted === true && message.encryptedContent) {
-      // 暗号化メッセージを復号化
       try {
         const encryptedMessage: EncryptedMessage = {
           encryptedContent: message.encryptedContent,
@@ -128,23 +122,25 @@ export class MessageEncryptor {
         };
         return await this.decryptMessage(encryptedMessage);
       } catch (error) {
-        console.error('Failed to decrypt message:', error);
-        return '🔒 暗号化されたメッセージ（復号化できません）';
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to decrypt message:', error);
+        }
+        return '[メッセージを読み込めませんでした]';
       }
     } else if (this.isLegacyMessage(message)) {
-      // レガシー平文メッセージ
       return message.text;
     } else if (typeof message === 'string') {
-      // 単純な文字列
       return message;
     } else {
-      console.warn('Unknown message format:', message);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Unknown message format:', message);
+      }
       return JSON.stringify(message);
     }
   }
 
   /**
-   * 公開鍵からキーIDを生成
+   * Generates a unique key identifier
    */
   private async generateKeyId(publicKeyPem: string): Promise<string> {
     const encoder = new TextEncoder();
@@ -155,10 +151,9 @@ export class MessageEncryptor {
   }
 
   /**
-   * バッチ暗号化（複数メッセージの効率的な暗号化）
+   * Efficiently encrypts multiple messages for the same recipient
    */
   async encryptBatch(messages: string[], recipientUserId: string): Promise<EncryptedMessage[]> {
-    // 公開鍵を一度だけ取得
     const recipientPublicKey = await this.keyManager.getPublicKey(recipientUserId);
     
     const encryptedMessages = await Promise.all(
@@ -169,7 +164,7 @@ export class MessageEncryptor {
   }
 
   /**
-   * 公開鍵を使用してメッセージを暗号化（内部用）
+   * Internal method for message encryption
    */
   private async encryptMessageWithKey(
     message: string, 
