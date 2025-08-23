@@ -1,5 +1,6 @@
 import { CryptoUtils } from './cryptoUtils';
 import { Plugin } from 'obsidian';
+import { API_ENDPOINTS } from '../constants';
 
 export interface EncryptionKeys {
   publicKey: string;
@@ -38,15 +39,51 @@ export class KeyManager {
 
       const data = await this.plugin.loadData();
       if (data?.pendingKeyRegistration) {
-        try {
-          await this.registerPublicKey(keys);
-          delete data.pendingKeyRegistration;
-          await this.plugin.saveData(data);
-        } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Failed to complete pending key registration:', error);
-          }
-        }
+        await this.attemptKeyRegistration(keys);
+      }
+    }
+  }
+
+  private async attemptKeyRegistration(keys: EncryptionKeys): Promise<void> {
+    const data = await this.plugin.loadData();
+    const failureCount = data.registrationFailureCount || 0;
+    const lastAttempt = data.lastRegistrationAttempt || 0;
+    
+    // Calculate exponential backoff: min(2^failureCount, 24) hours
+    const backoffHours = Math.min(Math.pow(2, failureCount), 24);
+    const backoffMs = backoffHours * 60 * 60 * 1000;
+    
+    // Check if enough time has passed since last attempt
+    const timeSinceLastAttempt = Date.now() - lastAttempt;
+    if (timeSinceLastAttempt < backoffMs) {
+      // Still in backoff period, skip registration
+      return;
+    }
+    
+    try {
+      await this.registerPublicKey(keys);
+      
+      // Success: clear all retry-related flags
+      delete data.pendingKeyRegistration;
+      delete data.registrationFailureCount;
+      delete data.lastRegistrationAttempt;
+      await this.plugin.saveData(data);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Public key registration completed successfully');
+      }
+    } catch (error) {
+      // Failure: update retry information
+      data.pendingKeyRegistration = true;
+      data.lastRegistrationAttempt = Date.now();
+      data.registrationFailureCount = failureCount + 1;
+      await this.plugin.saveData(data);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.error(
+          `Public key registration failed (attempt ${failureCount + 1}):`, 
+          error
+        );
       }
     }
   }
@@ -149,13 +186,11 @@ export class KeyManager {
   private async registerPublicKey(keyInfo: EncryptionKeys): Promise<void> {
     const settings = await this.plugin.loadData();
 
-    const apiUrl = settings.apiUrl || 'http://localhost:8787';
-
     try {
       const { requestUrl } = require('obsidian');
 
       const response = await requestUrl({
-        url: `${apiUrl}/publickey/register`,
+        url: API_ENDPOINTS.REGISTER_PUBLIC_KEY,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,10 +210,14 @@ export class KeyManager {
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to register public key:', error);
       }
-      await this.plugin.saveData({
-        ...await this.plugin.loadData(),
-        pendingKeyRegistration: true
-      });
+      
+      // For initial registration from generateAndSaveKeys, we need to save the pending flag
+      const data = await this.plugin.loadData();
+      data.pendingKeyRegistration = true;
+      data.lastRegistrationAttempt = Date.now();
+      data.registrationFailureCount = (data.registrationFailureCount || 0) + 1;
+      await this.plugin.saveData(data);
+      
       throw error;
     }
   }
@@ -190,11 +229,9 @@ export class KeyManager {
     }
 
     const settings = await this.plugin.loadData();
-    const apiUrl = settings.apiUrl || 'https://line-to-obsidian-dev.ryotaminami0709.workers.dev';
-
     const { requestUrl } = require('obsidian');
     const response = await requestUrl({
-      url: `${apiUrl}/publickey/${userId}`,
+      url: API_ENDPOINTS.GET_PUBLIC_KEY(userId),
       method: 'GET',
       headers: {
         'X-Vault-Id': settings.vaultId
