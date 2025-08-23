@@ -402,7 +402,9 @@ export default class LinePlugin extends Plugin {
               await this.app.vault.create(normalizedFilePath, finalContent);
             }
           } catch (err) {
-            console.error(`Error processing messages for date ${dateString}: ${err}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Error processing messages for date ${dateString}: ${err}`);
+            }
           }
         }
       } else {
@@ -466,7 +468,9 @@ export default class LinePlugin extends Plugin {
             newMessageCount++;
             syncedMessageIds.push(message.messageId);
           } catch (err) {
-            console.error(`Error processing message ${message.messageId}: ${err}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Error processing message ${message.messageId}: ${err}`);
+            }
           }
         }
       }
@@ -486,7 +490,9 @@ export default class LinePlugin extends Plugin {
   private async updateSyncStatus(messageIds: string[]) {
     try {
       if (!this.settings.lineUserId) {
-        console.error('LINE User ID not configured. Cannot update sync status.');
+        if (process.env.NODE_ENV === 'development') {
+          console.error('LINE User ID not configured. Cannot update sync status.');
+        }
         return;
       }
 
@@ -504,10 +510,14 @@ export default class LinePlugin extends Plugin {
       });
 
       if (response.status !== 200) {
-        console.error(`Failed to update sync status: ${response.status}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`Failed to update sync status: ${response.status}`);
+        }
       }
     } catch (err) {
-      console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
   }
 
@@ -537,7 +547,9 @@ export default class LinePlugin extends Plugin {
       try {
         await this.keyManager.initialize();
       } catch (keyError) {
-        console.error('Failed to initialize keys after mapping:', keyError);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to initialize keys after mapping:', keyError);
+        }
       }
 
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
