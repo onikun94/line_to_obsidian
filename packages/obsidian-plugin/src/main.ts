@@ -750,11 +750,18 @@ class LineSettingTab extends PluginSettingTab {
     infoBox.style.padding = '10px';
     infoBox.style.borderRadius = '5px';
     infoBox.style.marginBottom = '20px';
-    infoBox.innerHTML = `
-      <strong>ファイル名の使い分け：</strong><br>
-      • <strong>Group messages by date がオン：</strong> 1日分のメッセージが1つのファイルにまとめられ、「Grouped file name template」が使用されます<br>
-      • <strong>Group messages by date がオフ：</strong> 各メッセージが個別のファイルとして保存され、「Individual message file name template」が使用されます
-    `;
+    // Use DOM API instead of innerHTML
+    infoBox.createEl('strong', { text: 'ファイル名の使い分け：' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '• ' });
+    infoBox.createEl('strong', { text: 'Group messages by date がオン：' });
+    infoBox.createEl('span', { text: ' 1日分のメッセージが1つのファイルにまとめられ、「Grouped file name template」が使用されます' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '  ※ 固定のファイル名（例：{date}を使わずに「LINE-Messages」など）を設定すると、すべてのメッセージが常に同じファイルに追記されます' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '• ' });
+    infoBox.createEl('strong', { text: 'Group messages by date がオフ：' });
+    infoBox.createEl('span', { text: ' 各メッセージが個別のファイルとして保存され、「Individual message file name template」が使用されます' });
 
     new Setting(containerEl)
       .setName('Individual message file name template')
