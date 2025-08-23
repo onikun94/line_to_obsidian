@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent, TFile, TFolder, ToggleComponent } from 'obsidian';
 import { requestUrl } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
 import { KeyManager } from './crypto/keyManager';
@@ -15,6 +15,10 @@ interface LinePluginSettings {
   organizeByDate: boolean;
   fileNameTemplate: string;
   e2eeEnabled: boolean;
+  groupMessagesByDate: boolean;
+  groupedMessageTemplate: string;
+  groupedFrontmatterTemplate: string;
+  groupedFileNameTemplate: string;
   apiUrl?: string;
 }
 
@@ -27,7 +31,11 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   syncOnStartup: false,
   organizeByDate: false,
   fileNameTemplate: '{date}-{messageId}',
-  e2eeEnabled: true
+  e2eeEnabled: true,
+  groupMessagesByDate: false,
+  groupedMessageTemplate: '{time}: {text}',
+  groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
+  groupedFileNameTemplate: '{date}'
 }
 
 interface LineMessage {
@@ -44,6 +52,22 @@ interface LineMessage {
   senderKeyId?: string;
   recipientUserId?: string;
   version?: string;
+}
+
+// Helper function for template parsing
+function parseMessageTemplate(template: string, message: LineMessage, messageText: string, getJSTTimeString: (timestamp: number) => string): string {
+  return template
+    .replace(/{time}/g, getJSTTimeString(message.timestamp))
+    .replace(/{text}/g, messageText)
+    .replace(/{messageId}/g, message.messageId)
+    .replace(/{userId}/g, message.userId);
+}
+
+// Helper function for frontmatter template parsing
+function parseFrontmatterTemplate(template: string, dateString: string): string {
+  return template
+    .replace(/{date}/g, dateString.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'))
+    .replace(/{datecompact}/g, dateString);
 }
 
 export default class LinePlugin extends Plugin {
@@ -147,6 +171,15 @@ export default class LinePlugin extends Plugin {
     return `${hour}${minute}${second}`;
   }
 
+  public getJSTTimeString(timestamp: number): string {
+    const jstDate = this.toJST(timestamp);
+    const hour = String(jstDate.getHours()).padStart(2, '0');
+    const minute = String(jstDate.getMinutes()).padStart(2, '0');
+    const second = String(jstDate.getSeconds()).padStart(2, '0');
+
+    return `${hour}:${minute}:${second}`;
+  }
+
   private generateFileName(message: LineMessage): string {
     const template = this.settings.fileNameTemplate;
     const timestamp = message.timestamp;
@@ -183,7 +216,8 @@ export default class LinePlugin extends Plugin {
 
     while (true) {
       const fullPath = normalizePath(`${folderPath}/${uniqueFileName}`);
-      const exists = await this.app.vault.adapter.exists(fullPath);
+      const file = this.app.vault.getAbstractFileByPath(fullPath);
+      const exists = file !== null;
 
       if (!exists) {
         return uniqueFileName;
@@ -213,6 +247,10 @@ export default class LinePlugin extends Plugin {
       window.clearInterval(this.syncIntervalId);
       this.syncIntervalId = null;
     }
+  }
+
+  private parseMessageTemplate(template: string, message: LineMessage, messageText: string): string {
+    return parseMessageTemplate(template, message, messageText, (timestamp) => this.getJSTTimeString(timestamp));
   }
 
   private async syncMessages(isAutoSync = false) {
@@ -261,64 +299,179 @@ export default class LinePlugin extends Plugin {
       let newMessageCount = 0;
       const syncedMessageIds: string[] = [];
 
-      for (const message of messages) {
-        if (message.synced) {
-          continue;
-        }
-
-        let folderPath: string;
-        if (this.settings.organizeByDate) {
+      if (this.settings.groupMessagesByDate) {
+        // Group messages by date
+        const messagesByDate = new Map<string, LineMessage[]>();
+        
+        for (const message of messages) {
+          if (message.synced) {
+            continue;
+          }
           const dateString = this.getJSTDateString(message.timestamp);
-          folderPath = `${this.settings.noteFolderPath}/${dateString}`;
-        } else {
-          folderPath = this.settings.noteFolderPath;
+          if (!messagesByDate.has(dateString)) {
+            messagesByDate.set(dateString, []);
+          }
+          messagesByDate.get(dateString)!.push(message);
         }
 
-        try {
-          const fileName = await this.generateUniqueFileName(message, folderPath);
-          const filePath = `${folderPath}/${fileName}`;
-          const normalizedFilePath = normalizePath(filePath);
-
-          const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
-          if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
-            await this.app.vault.createFolder(normalizedFolderPath);
+        // Process grouped messages
+        for (const [dateString, dateMessages] of messagesByDate) {
+          let folderPath: string;
+          if (this.settings.organizeByDate) {
+            folderPath = `${this.settings.noteFolderPath}/${dateString}`;
+          } else {
+            folderPath = this.settings.noteFolderPath;
           }
 
-          const normalizedTargetFolderPath = normalizePath(folderPath);
-          if (!(await this.app.vault.adapter.exists(normalizedTargetFolderPath))) {
-            await this.app.vault.createFolder(normalizedTargetFolderPath);
-          }
-
-          let messageText: string;
           try {
-            messageText = await this.messageEncryptor.processMessage(message);
-          } catch (error) {
-            try {
-              messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
-            } catch (handlerError) {
-              if (process.env.NODE_ENV === 'development') {
-                console.error(`Failed to process message ${message.messageId}:`, handlerError);
+            // Create folders if needed
+            const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
+            const folder = this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+            if (!folder) {
+              await this.app.vault.createFolder(normalizedFolderPath);
+            }
+
+            const normalizedTargetFolderPath = normalizePath(folderPath);
+            const targetFolder = this.app.vault.getAbstractFileByPath(normalizedTargetFolderPath);
+            if (!targetFolder) {
+              await this.app.vault.createFolder(normalizedTargetFolderPath);
+            }
+
+            // Generate file name for date-based file
+            const fileNameWithoutExt = parseFrontmatterTemplate(this.settings.groupedFileNameTemplate, dateString);
+            const fileName = `${fileNameWithoutExt}.md`;
+            const filePath = `${folderPath}/${fileName}`;
+            const normalizedFilePath = normalizePath(filePath);
+
+            // Check if file already exists
+            let existingContent = '';
+            const existingFile = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+            if (existingFile instanceof TFile) {
+              existingContent = await this.app.vault.read(existingFile);
+            }
+
+            // Process all messages for this date
+            const newMessages: string[] = [];
+            for (const message of dateMessages) {
+              let messageText: string;
+              try {
+                messageText = await this.messageEncryptor.processMessage(message);
+              } catch (error) {
+                try {
+                  messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+                } catch (handlerError) {
+                  if (process.env.NODE_ENV === 'development') {
+                    console.error(`Failed to process message ${message.messageId}:`, handlerError);
+                  }
+                  messageText = message.text || '[メッセージを読み込めませんでした]';
+                }
               }
-              messageText = message.text || '[メッセージを読み込めませんでした]';
+
+              const messageContent = this.parseMessageTemplate(
+                this.settings.groupedMessageTemplate,
+                message,
+                messageText
+              );
+
+              newMessages.push(messageContent);
+              syncedMessageIds.push(message.messageId);
+              newMessageCount++;
+            }
+
+            // Append new messages to existing content or create new file
+            let finalContent: string;
+            if (existingContent) {
+              finalContent = existingContent.trimEnd() + '\n' + newMessages.join('\n');
+            } else {
+              // Create new file with frontmatter
+              const parsedFrontmatter = parseFrontmatterTemplate(this.settings.groupedFrontmatterTemplate, dateString);
+              const frontmatter = [
+                `---`,
+                parsedFrontmatter,
+                `---`,
+                ``,
+                ''
+              ].join('\n');
+              finalContent = frontmatter + newMessages.join('\n');
+            }
+
+            const fileToWrite = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+            if (fileToWrite instanceof TFile) {
+              await this.app.vault.modify(fileToWrite, finalContent);
+            } else {
+              await this.app.vault.create(normalizedFilePath, finalContent);
+            }
+          } catch (err) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Error processing messages for date ${dateString}: ${err}`);
             }
           }
+        }
+      } else {
+        // Original logic: one file per message
+        for (const message of messages) {
+          if (message.synced) {
+            continue;
+          }
 
-          const content = [
-            `---`,
-            `source: LINE`,
-            `date: ${this.getJSTISOString(message.timestamp)}`,
-            `messageId: ${message.messageId}`,
-            `userId: ${message.userId}`,
-            `---`,
-            ``,
-            `${messageText}`
-          ].join('\n');
+          let folderPath: string;
+          if (this.settings.organizeByDate) {
+            const dateString = this.getJSTDateString(message.timestamp);
+            folderPath = `${this.settings.noteFolderPath}/${dateString}`;
+          } else {
+            folderPath = this.settings.noteFolderPath;
+          }
 
-          await this.app.vault.create(normalizedFilePath, content);
-          newMessageCount++;
-          syncedMessageIds.push(message.messageId);
-        } catch (err) {
-          console.error(`Error processing message ${message.messageId}: ${err}`);
+          try {
+            const fileName = await this.generateUniqueFileName(message, folderPath);
+            const filePath = `${folderPath}/${fileName}`;
+            const normalizedFilePath = normalizePath(filePath);
+
+            const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
+            const baseFolder = this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+            if (!baseFolder) {
+              await this.app.vault.createFolder(normalizedFolderPath);
+            }
+
+            const normalizedTargetFolderPath = normalizePath(folderPath);
+            const targetFolder = this.app.vault.getAbstractFileByPath(normalizedTargetFolderPath);
+            if (!targetFolder) {
+              await this.app.vault.createFolder(normalizedTargetFolderPath);
+            }
+
+            let messageText: string;
+            try {
+              messageText = await this.messageEncryptor.processMessage(message);
+            } catch (error) {
+              try {
+                messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+              } catch (handlerError) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.error(`Failed to process message ${message.messageId}:`, handlerError);
+                }
+                messageText = message.text || '[メッセージを読み込めませんでした]';
+              }
+            }
+
+            const content = [
+              `---`,
+              `source: LINE`,
+              `date: ${this.getJSTISOString(message.timestamp)}`,
+              `messageId: ${message.messageId}`,
+              `userId: ${message.userId}`,
+              `---`,
+              ``,
+              `${messageText}`
+            ].join('\n');
+
+            await this.app.vault.create(normalizedFilePath, content);
+            newMessageCount++;
+            syncedMessageIds.push(message.messageId);
+          } catch (err) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Error processing message ${message.messageId}: ${err}`);
+            }
+          }
         }
       }
 
@@ -337,7 +490,9 @@ export default class LinePlugin extends Plugin {
   private async updateSyncStatus(messageIds: string[]) {
     try {
       if (!this.settings.lineUserId) {
-        console.error('LINE User ID not configured. Cannot update sync status.');
+        if (process.env.NODE_ENV === 'development') {
+          console.error('LINE User ID not configured. Cannot update sync status.');
+        }
         return;
       }
 
@@ -355,10 +510,14 @@ export default class LinePlugin extends Plugin {
       });
 
       if (response.status !== 200) {
-        console.error(`Failed to update sync status: ${response.status}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`Failed to update sync status: ${response.status}`);
+        }
       }
     } catch (err) {
-      console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
   }
 
@@ -388,7 +547,9 @@ export default class LinePlugin extends Plugin {
       try {
         await this.keyManager.initialize();
       } catch (keyError) {
-        console.error('Failed to initialize keys after mapping:', keyError);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to initialize keys after mapping:', keyError);
+        }
       }
 
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
@@ -410,7 +571,7 @@ class LineSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'LINE Integration Settings' });
+    // Don't use top-level headings in settings tab
 
     new Setting(containerEl)
       .setName('Note folder path')
@@ -488,19 +649,125 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
+    let organizeBydateToggle: ToggleComponent;
+    const organizeBydateSetting = new Setting(containerEl)
       .setName('Organize by date')
-      .setDesc('日付ごとにフォルダを作成してメッセージを整理するかどうか')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.organizeByDate)
-        .onChange(async (value) => {
-          this.plugin.settings.organizeByDate = value;
-          await this.plugin.saveSettings();
-        }));
+      .setDesc('日付ごとにフォルダを作成してメッセージを整理するかどうか（注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます）')
+      .addToggle(toggle => {
+        organizeBydateToggle = toggle;
+        toggle.setValue(this.plugin.settings.organizeByDate)
+          .onChange(async (value) => {
+            this.plugin.settings.organizeByDate = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    // Add section header for file organization
+    new Setting(containerEl)
+      .setHeading()
+      .setName('ファイル整理設定');
 
     new Setting(containerEl)
-      .setName('File name template')
-      .setDesc('ファイル名のテンプレート（.md拡張子は自動で付与されます）。利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}')
+      .setName('Group messages by date')
+      .setDesc('同じ日付のメッセージを1つのファイルにまとめるかどうか（チェックを外すとメッセージごとに個別のファイルを作成）')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.groupMessagesByDate)
+        .onChange(async (value) => {
+          this.plugin.settings.groupMessagesByDate = value;
+          
+          // When enabling group by date, disable organize by date by default
+          if (value && this.plugin.settings.organizeByDate) {
+            this.plugin.settings.organizeByDate = false;
+            // Update the toggle UI
+            if (organizeBydateToggle) {
+              organizeBydateToggle.setValue(false);
+            }
+          }
+          
+          await this.plugin.saveSettings();
+          
+          // Show/hide the grouped message related settings
+          messageTemplateSetting.settingEl.toggle(value);
+          frontmatterTemplateSetting.settingEl.toggle(value);
+          groupedFileNameSetting.settingEl.toggle(value);
+        }));
+
+    const messageTemplateSetting = new Setting(containerEl)
+      .setName('Grouped message template')
+      .setDesc('日付でグループ化されたメッセージの表示テンプレート\n利用可能な変数: {time} - 時刻, {text} - メッセージ内容, {messageId} - メッセージID, {userId} - ユーザーID')
+      .addTextArea(text => {
+        text.setPlaceholder('{time}: {text}')
+          .setValue(this.plugin.settings.groupedMessageTemplate)
+          .onChange(async (value) => {
+            this.plugin.settings.groupedMessageTemplate = value || '{time}: {text}';
+            await this.plugin.saveSettings();
+          });
+        
+        // Make text area large
+        text.inputEl.rows = 3;
+        
+        return text;
+      });
+    
+
+    // Initially hide the message template setting if grouping is disabled
+    messageTemplateSetting.settingEl.toggle(this.plugin.settings.groupMessagesByDate);
+
+    const frontmatterTemplateSetting = new Setting(containerEl)
+      .setName('Grouped message frontmatter template')
+      .setDesc('日付でグループ化されたファイルのフロントマター\n利用可能な変数: {date} - 日付, {datecompact} - 日付（ハイフンなし）')
+      .addTextArea(text => {
+        text.setPlaceholder('source: LINE\ndate: {date}')
+          .setValue(this.plugin.settings.groupedFrontmatterTemplate)
+          .onChange(async (value) => {
+            this.plugin.settings.groupedFrontmatterTemplate = value || 'source: LINE\ndate: {date}';
+            await this.plugin.saveSettings();
+          });
+        
+        text.inputEl.rows = 5;
+        
+        return text;
+      });
+    
+    // Initially hide the frontmatter template setting if grouping is disabled
+    frontmatterTemplateSetting.settingEl.toggle(this.plugin.settings.groupMessagesByDate);
+
+    const groupedFileNameSetting = new Setting(containerEl)
+      .setName('Grouped file name template')
+      .setDesc('日付ごとにまとめられたファイルの名前（「Group messages by date」がオンの場合に使用）\n利用可能な変数: {date} - 日付 (例: 2024-01-15), {datecompact} - 日付ハイフンなし (例: 20240115)')
+      .addText(text => text
+        .setPlaceholder('{date}')
+        .setValue(this.plugin.settings.groupedFileNameTemplate)
+        .onChange(async (value) => {
+          this.plugin.settings.groupedFileNameTemplate = value || '{date}';
+          await this.plugin.saveSettings();
+        }));
+    
+    // Initially hide the grouped file name setting if grouping is disabled
+    groupedFileNameSetting.settingEl.toggle(this.plugin.settings.groupMessagesByDate);
+
+    // Add an info box to explain the difference
+    const infoBox = containerEl.createDiv({ cls: 'setting-item-description' });
+    infoBox.style.backgroundColor = 'var(--background-secondary)';
+    infoBox.style.padding = '10px';
+    infoBox.style.borderRadius = '5px';
+    infoBox.style.marginBottom = '20px';
+    // Use DOM API instead of innerHTML
+    infoBox.createEl('strong', { text: 'ファイル名の使い分け：' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '• ' });
+    infoBox.createEl('strong', { text: 'Group messages by date がオン：' });
+    infoBox.createEl('span', { text: ' 1日分のメッセージが1つのファイルにまとめられ、「Grouped file name template」が使用されます' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '  ※ 固定のファイル名（例：{date}を使わずに「LINE-Messages」など）を設定すると、すべてのメッセージが常に同じファイルに追記されます' });
+    infoBox.createEl('br');
+    infoBox.createEl('span', { text: '• ' });
+    infoBox.createEl('strong', { text: 'Group messages by date がオフ：' });
+    infoBox.createEl('span', { text: ' 各メッセージが個別のファイルとして保存され、「Individual message file name template」が使用されます' });
+
+    new Setting(containerEl)
+      .setName('Individual message file name template')
+      .setDesc('個別メッセージファイルのファイル名テンプレート（「Group messages by date」がオフの場合に使用）\n利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}')
       .addText(text => text
         .setPlaceholder('{date}-{messageId}')
         .setValue(this.plugin.settings.fileNameTemplate)

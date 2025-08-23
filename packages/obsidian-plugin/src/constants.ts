@@ -3,7 +3,7 @@ const isLocalMode = process.env.NODE_ENV === 'local';
 const BASE_URL = process.env.OBSIDIAN_LINE_API_URL || 
   (isLocalMode ? 'http://localhost:8787' : '');
 
-if (!BASE_URL) {
+if (!BASE_URL && process.env.NODE_ENV === 'development') {
   console.error('警告: OBSIDIAN_LINE_API_URLが設定されていません。APIとの通信ができません。');
 }
 
