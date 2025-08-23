@@ -1,10 +1,10 @@
-name: 自動リリース
+name: Auto Release
 
 on:
   workflow_dispatch:
     inputs:
       version_type:
-        description: 'バージョンタイプ'
+        description: 'Version type'
         required: true
         default: 'patch'
         type: choice
@@ -21,75 +21,78 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: チェックアウト
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: PNPM設定
+      - name: Setup PNPM
         uses: pnpm/action-setup@v4
 
-      - name: Node.js設定
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: 依存関係のインストール
+      - name: Install dependencies
         run: pnpm install
 
-      - name: Gitユーザー設定
+      - name: Configure Git user
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-      - name: バージョン更新とコミット
+      - name: Update version and commit
         id: version_update
         run: |
-          # 現在のバージョンを取得
+          # Get current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "現在のバージョン: $CURRENT_VERSION"
+          echo "Current version: $CURRENT_VERSION"
           
-          # バージョンを更新
+          # Update version
           npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
           
-          # 新しいバージョンを取得
+          # Get new version
           NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "新しいバージョン: $NEW_VERSION"
+          echo "New version: $NEW_VERSION"
           
-          # manifest.jsonとversions.jsonを更新
+          # Update manifest.json and versions.json
           npm run version
           
-          # 変更をコミット
-          git add package.json manifest.json versions.json
-          git commit -m "chore: バージョンを ${NEW_VERSION} に更新"
+          # Update README.md version badge
+          sed -i "s/version-[0-9]\+\.[0-9]\+\.[0-9]\+-blue/version-${NEW_VERSION}-blue/g" README.md
+          
+          # Commit changes
+          git add package.json manifest.json versions.json README.md
+          git commit -m "chore: update version to ${NEW_VERSION}"
           
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: プラグインのビルド
+      - name: Build plugin
         env:
           OBSIDIAN_LINE_API_URL: ${{ secrets.OBSIDIAN_LINE_API_URL }}
           NODE_ENV: production
         run: pnpm --filter obsidian-plugin build
 
-      - name: 変更をプッシュ
+      - name: Push changes
         run: |
           git push origin main
 
-      - name: タグ作成とプッシュ
+      - name: Create and push tag
         run: |
           git tag ${{ steps.version_update.outputs.new_version }}
           git push origin ${{ steps.version_update.outputs.new_version }}
 
-      - name: リリースファイルの準備
+      - name: Prepare release files
         run: |
           mkdir ${{ github.event.repository.name }}
           cp packages/obsidian-plugin/main.js manifest.json ${{ github.event.repository.name }}/
           zip -r ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}
 
-      - name: GitHubリリースの作成
+      - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -100,7 +103,7 @@ jobs:
             packages/obsidian-plugin/main.js \
             manifest.json \
 
-      - name: リリース完了通知
+      - name: Release completion notification
         run: |
-          echo "🎉 リリース ${{ steps.version_update.outputs.new_version }} が正常に作成されました！"
-          echo "リリースページ: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version_update.outputs.new_version }}" 
+          echo "Release ${{ steps.version_update.outputs.new_version }} has been created successfully!"
+          echo "Release page: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version_update.outputs.new_version }}" 
