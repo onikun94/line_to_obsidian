@@ -55,7 +55,11 @@ describe('LinePlugin', () => {
         syncInterval: 2,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
+        groupMessagesByDate: false,
+        groupedFileNameTemplate: '{date}',
+        groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
+        groupedMessageTemplate: '{time}: {text}'
       });
     });
 
@@ -76,7 +80,11 @@ describe('LinePlugin', () => {
         syncInterval: 2,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
+        groupMessagesByDate: false,
+        groupedFileNameTemplate: '{date}',
+        groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
+        groupedMessageTemplate: '{time}: {text}'
       });
     });
   });
