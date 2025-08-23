@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent, TFile, TFolder, ToggleComponent } from 'obsidian';
 import { requestUrl } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
 import { KeyManager } from './crypto/keyManager';
@@ -216,7 +216,8 @@ export default class LinePlugin extends Plugin {
 
     while (true) {
       const fullPath = normalizePath(`${folderPath}/${uniqueFileName}`);
-      const exists = await this.app.vault.adapter.exists(fullPath);
+      const file = this.app.vault.getAbstractFileByPath(fullPath);
+      const exists = file !== null;
 
       if (!exists) {
         return uniqueFileName;
@@ -325,12 +326,14 @@ export default class LinePlugin extends Plugin {
           try {
             // Create folders if needed
             const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
-            if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
+            const folder = this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+            if (!folder) {
               await this.app.vault.createFolder(normalizedFolderPath);
             }
 
             const normalizedTargetFolderPath = normalizePath(folderPath);
-            if (!(await this.app.vault.adapter.exists(normalizedTargetFolderPath))) {
+            const targetFolder = this.app.vault.getAbstractFileByPath(normalizedTargetFolderPath);
+            if (!targetFolder) {
               await this.app.vault.createFolder(normalizedTargetFolderPath);
             }
 
@@ -342,8 +345,9 @@ export default class LinePlugin extends Plugin {
 
             // Check if file already exists
             let existingContent = '';
-            if (await this.app.vault.adapter.exists(normalizedFilePath)) {
-              existingContent = await this.app.vault.adapter.read(normalizedFilePath);
+            const existingFile = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+            if (existingFile instanceof TFile) {
+              existingContent = await this.app.vault.read(existingFile);
             }
 
             // Process all messages for this date
@@ -391,8 +395,9 @@ export default class LinePlugin extends Plugin {
               finalContent = frontmatter + newMessages.join('\n');
             }
 
-            if (await this.app.vault.adapter.exists(normalizedFilePath)) {
-              await this.app.vault.adapter.write(normalizedFilePath, finalContent);
+            const fileToWrite = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+            if (fileToWrite instanceof TFile) {
+              await this.app.vault.modify(fileToWrite, finalContent);
             } else {
               await this.app.vault.create(normalizedFilePath, finalContent);
             }
@@ -421,12 +426,14 @@ export default class LinePlugin extends Plugin {
             const normalizedFilePath = normalizePath(filePath);
 
             const normalizedFolderPath = normalizePath(this.settings.noteFolderPath);
-            if (!(await this.app.vault.adapter.exists(normalizedFolderPath))) {
+            const baseFolder = this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+            if (!baseFolder) {
               await this.app.vault.createFolder(normalizedFolderPath);
             }
 
             const normalizedTargetFolderPath = normalizePath(folderPath);
-            if (!(await this.app.vault.adapter.exists(normalizedTargetFolderPath))) {
+            const targetFolder = this.app.vault.getAbstractFileByPath(normalizedTargetFolderPath);
+            if (!targetFolder) {
               await this.app.vault.createFolder(normalizedTargetFolderPath);
             }
 
@@ -630,7 +637,7 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    let organizeBydateToggle: any;
+    let organizeBydateToggle: ToggleComponent;
     const organizeBydateSetting = new Setting(containerEl)
       .setName('Organize by date')
       .setDesc('日付ごとにフォルダを作成してメッセージを整理するかどうか（注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます）')
