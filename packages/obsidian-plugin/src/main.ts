@@ -663,7 +663,9 @@ class LineSettingTab extends PluginSettingTab {
       });
 
     // Add section header for file organization
-    containerEl.createEl('h3', { text: 'ファイル整理設定' });
+    new Setting(containerEl)
+      .setHeading()
+      .setName('ファイル整理設定');
 
     new Setting(containerEl)
       .setName('Group messages by date')
