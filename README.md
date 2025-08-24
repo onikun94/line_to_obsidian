@@ -1,7 +1,7 @@
 # LINE Notes Sync
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)](https://github.com/onikun94/obsidian-to-note/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue.svg)](https://github.com/onikun94/obsidian-to-note/releases)
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-7c3aed.svg)](https://obsidian.md)
 
 A plugin that connects Obsidian with LINE. Messages sent from LINE are automatically saved as Obsidian notes.
