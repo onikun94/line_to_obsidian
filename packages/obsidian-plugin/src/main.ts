@@ -127,7 +127,12 @@ export default class LinePlugin extends Plugin {
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    const currentData = await this.loadData() || {};
+    const dataToSave = {
+      ...currentData,
+      ...this.settings
+    };
+    await this.saveData(dataToSave);
     this.setupAutoSync();
   }
 
