@@ -27,7 +27,7 @@ vi.mock('@line/bot-sdk', () => ({
 describe('Cloudflare Worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // KVNamespaceのデフォルトモック
     mockKVNamespace.get.mockResolvedValue(null);
     mockKVNamespace.put.mockResolvedValue(undefined);
@@ -43,7 +43,7 @@ describe('Cloudflare Worker', () => {
       // healthエンドポイントのハンドラーを直接テスト
       const handler = vi.fn().mockReturnValue({ status: 'ok' });
       const result = handler(mockContext);
-      
+
       expect(result).toEqual({ status: 'ok' });
     });
   });
@@ -70,10 +70,10 @@ describe('Cloudflare Worker', () => {
       });
 
       handler(mockContext);
-      
+
       expect(mockContext.json).toHaveBeenCalledWith(
-        { error: 'Missing userId parameter' }, 
-        400
+        { error: 'Missing userId parameter' },
+        400,
       );
     });
 
@@ -85,15 +85,17 @@ describe('Cloudflare Worker', () => {
           userId: 'user1',
           text: 'Hello',
           vaultId: 'vault1',
-          synced: false
-        }
+          synced: false,
+        },
       ];
 
       mockKVNamespace.get.mockResolvedValue('vault1');
       mockKVNamespace.list.mockResolvedValue({
-        keys: [{ name: 'vault1/user1/msg1' }]
+        keys: [{ name: 'vault1/user1/msg1' }],
       });
-      mockKVNamespace.get.mockResolvedValueOnce('vault1').mockResolvedValueOnce(mockMessages[0]);
+      mockKVNamespace.get
+        .mockResolvedValueOnce('vault1')
+        .mockResolvedValueOnce(mockMessages[0]);
 
       const mockContext = {
         req: {
@@ -114,7 +116,7 @@ describe('Cloudflare Worker', () => {
       const handler = vi.fn().mockImplementation(async (c: any) => {
         const vaultId = c.req.param('vaultId');
         const userId = c.req.param('userId');
-        
+
         if (!userId) {
           return c.json({ error: 'Missing userId parameter' }, 400);
         }
@@ -125,7 +127,9 @@ describe('Cloudflare Worker', () => {
         }
 
         const messages: any[] = [];
-        const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `${vaultId}/${userId}/` });
+        const { keys } = await c.env.LINE_MESSAGES.list({
+          prefix: `${vaultId}/${userId}/`,
+        });
 
         for (const key of keys) {
           const message = await c.env.LINE_MESSAGES.get(key.name, 'json');
@@ -138,7 +142,7 @@ describe('Cloudflare Worker', () => {
       });
 
       await handler(mockContext);
-      
+
       expect(mockContext.json).toHaveBeenCalledWith([mockMessages[0]]);
     });
   });
@@ -160,19 +164,19 @@ describe('Cloudflare Worker', () => {
       });
 
       await handler(mockContext);
-      
+
       expect(mockContext.json).toHaveBeenCalledWith(
-        { error: 'Missing userId or vaultId' }, 
-        400
+        { error: 'Missing userId or vaultId' },
+        400,
       );
     });
 
     it('マッピングを正常に作成する', async () => {
       const mockContext = {
         req: {
-          json: vi.fn().mockResolvedValue({ 
-            userId: 'user1', 
-            vaultId: 'vault1' 
+          json: vi.fn().mockResolvedValue({
+            userId: 'user1',
+            vaultId: 'vault1',
           }),
         },
         env: {
@@ -192,7 +196,7 @@ describe('Cloudflare Worker', () => {
       });
 
       await handler(mockContext);
-      
+
       expect(mockKVNamespace.put).toHaveBeenCalledWith('user1', 'vault1');
       expect(mockContext.json).toHaveBeenCalledWith({ status: 'ok' });
     });
@@ -209,7 +213,7 @@ describe('Cloudflare Worker', () => {
 
       const handler = vi.fn().mockImplementation(async (c: any) => {
         const { vaultId, messageIds, userId } = await c.req.json();
-        
+
         if (!vaultId || !messageIds || !Array.isArray(messageIds)) {
           return c.json({ error: 'Missing vaultId or messageIds' }, 400);
         }
@@ -220,10 +224,10 @@ describe('Cloudflare Worker', () => {
       });
 
       await handler(mockContext);
-      
+
       expect(mockContext.json).toHaveBeenCalledWith(
-        { error: 'Missing vaultId or messageIds' }, 
-        400
+        { error: 'Missing vaultId or messageIds' },
+        400,
       );
     });
 
@@ -234,18 +238,19 @@ describe('Cloudflare Worker', () => {
         userId: 'user1',
         text: 'Hello',
         vaultId: 'vault1',
-        synced: false
+        synced: false,
       };
 
-      mockKVNamespace.get.mockResolvedValueOnce('vault1') // for auth check
-                           .mockResolvedValueOnce(mockMessage); // for message retrieval
+      mockKVNamespace.get
+        .mockResolvedValueOnce('vault1') // for auth check
+        .mockResolvedValueOnce(mockMessage); // for message retrieval
 
       const mockContext = {
         req: {
-          json: vi.fn().mockResolvedValue({ 
+          json: vi.fn().mockResolvedValue({
             vaultId: 'vault1',
             messageIds: ['msg1'],
-            userId: 'user1'
+            userId: 'user1',
           }),
         },
         env: {
@@ -257,7 +262,7 @@ describe('Cloudflare Worker', () => {
 
       const handler = vi.fn().mockImplementation(async (c: any) => {
         const { vaultId, messageIds, userId } = await c.req.json();
-        
+
         if (!vaultId || !messageIds || !Array.isArray(messageIds)) {
           return c.json({ error: 'Missing vaultId or messageIds' }, 400);
         }
@@ -274,26 +279,29 @@ describe('Cloudflare Worker', () => {
         for (const messageId of messageIds) {
           const key = `${vaultId}/${userId}/${messageId}`;
           const message = await c.env.LINE_MESSAGES.get(key, 'json');
-          
+
           if (message) {
             message.synced = true;
             await c.env.LINE_MESSAGES.put(key, JSON.stringify(message), {
-              expirationTtl: 60 * 60 * 24 * 10
+              expirationTtl: 60 * 60 * 24 * 10,
             });
           }
         }
-        
+
         return c.json({ status: 'ok', updated: messageIds.length });
       });
 
       await handler(mockContext);
-      
+
       expect(mockKVNamespace.put).toHaveBeenCalledWith(
         'vault1/user1/msg1',
         JSON.stringify({ ...mockMessage, synced: true }),
-        { expirationTtl: 60 * 60 * 24 * 10 }
+        { expirationTtl: 60 * 60 * 24 * 10 },
       );
-      expect(mockContext.json).toHaveBeenCalledWith({ status: 'ok', updated: 1 });
+      expect(mockContext.json).toHaveBeenCalledWith({
+        status: 'ok',
+        updated: 1,
+      });
     });
   });
-}); 
+});

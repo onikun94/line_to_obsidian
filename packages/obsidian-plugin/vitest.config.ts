@@ -15,17 +15,17 @@ export default defineConfig({
         '**/*.test.ts',
         '**/*.spec.ts',
         'esbuild.config.mjs',
-        'version-bump.mjs'
-      ]
-    }
+        'version-bump.mjs',
+      ],
+    },
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'obsidian': path.resolve(__dirname, './tests/mocks/obsidian.ts')
-    }
+      obsidian: path.resolve(__dirname, './tests/mocks/obsidian.ts'),
+    },
   },
   define: {
     global: 'globalThis',
-  }
-}); 
+  },
+});

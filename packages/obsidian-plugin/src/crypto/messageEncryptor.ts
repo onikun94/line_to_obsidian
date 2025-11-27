@@ -1,5 +1,5 @@
 import { CryptoUtils } from './cryptoUtils';
-import { KeyManager } from './keyManager';
+import type { KeyManager } from './keyManager';
 
 export interface EncryptedMessage {
   encryptedContent: string;
@@ -22,20 +22,30 @@ export class MessageEncryptor {
   /**
    * Encrypts a message for a specific recipient
    */
-  async encryptMessage(message: string, recipientUserId: string): Promise<EncryptedMessage> {
+  async encryptMessage(
+    message: string,
+    recipientUserId: string,
+  ): Promise<EncryptedMessage> {
     try {
-      const recipientPublicKey = await this.keyManager.getPublicKey(recipientUserId);
-      
+      const recipientPublicKey =
+        await this.keyManager.getPublicKey(recipientUserId);
+
       const aesKey = await CryptoUtils.generateAESKey();
-      
-      const { encrypted, iv } = await CryptoUtils.encryptMessage(message, aesKey);
-      
-      const encryptedAESKey = await CryptoUtils.encryptAESKey(aesKey, recipientPublicKey);
-      
+
+      const { encrypted, iv } = await CryptoUtils.encryptMessage(
+        message,
+        aesKey,
+      );
+
+      const encryptedAESKey = await CryptoUtils.encryptAESKey(
+        aesKey,
+        recipientPublicKey,
+      );
+
       const keyPair = this.keyManager.getKeyPair();
       const publicKeyPem = await CryptoUtils.exportPublicKey(keyPair.publicKey);
       const senderKeyId = await this.generateKeyId(publicKeyPem);
-      
+
       return {
         encryptedContent: CryptoUtils.arrayBufferToBase64(encrypted),
         encryptedAESKey: CryptoUtils.arrayBufferToBase64(encryptedAESKey),
@@ -43,7 +53,7 @@ export class MessageEncryptor {
         senderKeyId,
         recipientUserId,
         timestamp: Date.now(),
-        version: this.VERSION
+        version: this.VERSION,
       };
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -60,20 +70,35 @@ export class MessageEncryptor {
     try {
       if (encryptedMessage.version !== this.VERSION) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn(`Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`);
+          console.warn(
+            `Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`,
+          );
         }
       }
-      
+
       const keyPair = this.keyManager.getKeyPair();
-      
-      const encryptedContent = CryptoUtils.base64ToArrayBuffer(encryptedMessage.encryptedContent);
-      const encryptedAESKey = CryptoUtils.base64ToArrayBuffer(encryptedMessage.encryptedAESKey);
-      const iv = new Uint8Array(CryptoUtils.base64ToArrayBuffer(encryptedMessage.iv));
-      
-      const aesKey = await CryptoUtils.decryptAESKey(encryptedAESKey, keyPair.privateKey);
-      
-      const decrypted = await CryptoUtils.decryptMessage(encryptedContent, aesKey, iv);
-      
+
+      const encryptedContent = CryptoUtils.base64ToArrayBuffer(
+        encryptedMessage.encryptedContent,
+      );
+      const encryptedAESKey = CryptoUtils.base64ToArrayBuffer(
+        encryptedMessage.encryptedAESKey,
+      );
+      const iv = new Uint8Array(
+        CryptoUtils.base64ToArrayBuffer(encryptedMessage.iv),
+      );
+
+      const aesKey = await CryptoUtils.decryptAESKey(
+        encryptedAESKey,
+        keyPair.privateKey,
+      );
+
+      const decrypted = await CryptoUtils.decryptMessage(
+        encryptedContent,
+        aesKey,
+        iv,
+      );
+
       return decrypted;
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -87,22 +112,26 @@ export class MessageEncryptor {
    * Type guard for encrypted messages
    */
   isEncryptedMessage(message: any): message is EncryptedMessage {
-    return message &&
+    return (
+      message &&
       typeof message === 'object' &&
       typeof message.encryptedContent === 'string' &&
       typeof message.encryptedAESKey === 'string' &&
       typeof message.iv === 'string' &&
-      typeof message.version === 'string';
+      typeof message.version === 'string'
+    );
   }
 
   /**
    * Checks for legacy message format compatibility
    */
   isLegacyMessage(message: any): boolean {
-    return message &&
+    return (
+      message &&
       typeof message === 'object' &&
       typeof message.text === 'string' &&
-      !this.isEncryptedMessage(message);
+      !this.isEncryptedMessage(message)
+    );
   }
 
   /**
@@ -118,7 +147,7 @@ export class MessageEncryptor {
           senderKeyId: message.senderKeyId,
           recipientUserId: message.recipientUserId,
           timestamp: message.timestamp,
-          version: message.version || '1.0'
+          version: message.version || '1.0',
         };
         return await this.decryptMessage(encryptedMessage);
       } catch (error) {
@@ -147,19 +176,32 @@ export class MessageEncryptor {
     const data = encoder.encode(publicKeyPem);
     const hash = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hash));
-    return hashArray.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashArray
+      .slice(0, 8)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 
   /**
    * Efficiently encrypts multiple messages for the same recipient
    */
-  async encryptBatch(messages: string[], recipientUserId: string): Promise<EncryptedMessage[]> {
-    const recipientPublicKey = await this.keyManager.getPublicKey(recipientUserId);
-    
+  async encryptBatch(
+    messages: string[],
+    recipientUserId: string,
+  ): Promise<EncryptedMessage[]> {
+    const recipientPublicKey =
+      await this.keyManager.getPublicKey(recipientUserId);
+
     const encryptedMessages = await Promise.all(
-      messages.map(message => this.encryptMessageWithKey(message, recipientPublicKey, recipientUserId))
+      messages.map((message) =>
+        this.encryptMessageWithKey(
+          message,
+          recipientPublicKey,
+          recipientUserId,
+        ),
+      ),
     );
-    
+
     return encryptedMessages;
   }
 
@@ -167,18 +209,21 @@ export class MessageEncryptor {
    * Internal method for message encryption
    */
   private async encryptMessageWithKey(
-    message: string, 
-    recipientPublicKey: CryptoKey, 
-    recipientUserId: string
+    message: string,
+    recipientPublicKey: CryptoKey,
+    recipientUserId: string,
   ): Promise<EncryptedMessage> {
     const aesKey = await CryptoUtils.generateAESKey();
     const { encrypted, iv } = await CryptoUtils.encryptMessage(message, aesKey);
-    const encryptedAESKey = await CryptoUtils.encryptAESKey(aesKey, recipientPublicKey);
-    
+    const encryptedAESKey = await CryptoUtils.encryptAESKey(
+      aesKey,
+      recipientPublicKey,
+    );
+
     const keyPair = this.keyManager.getKeyPair();
     const publicKeyPem = await CryptoUtils.exportPublicKey(keyPair.publicKey);
     const senderKeyId = await this.generateKeyId(publicKeyPem);
-    
+
     return {
       encryptedContent: CryptoUtils.arrayBufferToBase64(encrypted),
       encryptedAESKey: CryptoUtils.arrayBufferToBase64(encryptedAESKey),
@@ -186,7 +231,7 @@ export class MessageEncryptor {
       senderKeyId,
       recipientUserId,
       timestamp: Date.now(),
-      version: this.VERSION
+      version: this.VERSION,
     };
   }
 }

@@ -1,10 +1,13 @@
 const isLocalMode = process.env.NODE_ENV === 'local';
 
-const BASE_URL = process.env.OBSIDIAN_LINE_API_URL || 
+const BASE_URL =
+  process.env.OBSIDIAN_LINE_API_URL ||
   (isLocalMode ? 'http://localhost:8787' : '');
 
 if (!BASE_URL && process.env.NODE_ENV === 'development') {
-  console.error('警告: OBSIDIAN_LINE_API_URLが設定されていません。APIとの通信ができません。');
+  console.error(
+    '警告: OBSIDIAN_LINE_API_URLが設定されていません。APIとの通信ができません。',
+  );
 }
 
 export const API_ENDPOINTS = {
@@ -19,4 +22,4 @@ export const API_ENDPOINTS = {
   UPDATE_SYNC_STATUS: `${BASE_URL}/messages/update-sync-status`,
   REGISTER_PUBLIC_KEY: `${BASE_URL}/publickey/register`,
   GET_PUBLIC_KEY: (userId: string): string => `${BASE_URL}/publickey/${userId}`,
-} as const; 
+} as const;

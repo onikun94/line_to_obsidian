@@ -59,14 +59,14 @@ describe('LinePlugin', () => {
         groupMessagesByDate: false,
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
-        groupedMessageTemplate: '{time}: {text}'
+        groupedMessageTemplate: '{time}: {text}',
       });
     });
 
     it('読み込まれたデータがデフォルト設定とマージされる', async () => {
       mockLoadData.mockResolvedValue({
         vaultId: 'test-vault',
-        autoSync: true
+        autoSync: true,
       });
 
       await plugin.loadSettings();
@@ -84,7 +84,7 @@ describe('LinePlugin', () => {
         groupMessagesByDate: false,
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
-        groupedMessageTemplate: '{time}: {text}'
+        groupedMessageTemplate: '{time}: {text}',
       });
     });
   });
@@ -99,7 +99,7 @@ describe('LinePlugin', () => {
         syncInterval: 1,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
       };
 
       await plugin.saveSettings();
@@ -120,14 +120,14 @@ describe('LinePlugin', () => {
         syncInterval: 1,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
       };
 
       (plugin as any).setupAutoSync();
 
       expect(setIntervalSpy).toHaveBeenCalledWith(
         expect.any(Function),
-        60 * 60 * 1000 // 1 hour in ms
+        60 * 60 * 1000, // 1 hour in ms
       );
     });
 
@@ -142,7 +142,7 @@ describe('LinePlugin', () => {
         syncInterval: 1,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
       };
 
       (plugin as any).setupAutoSync();
@@ -161,14 +161,14 @@ describe('LinePlugin', () => {
         syncInterval: 0,
         syncOnStartup: false,
         organizeByDate: false,
-        fileNameTemplate: '{date}-{messageId}'
+        fileNameTemplate: '{date}-{messageId}',
       };
 
       (plugin as any).setupAutoSync();
 
       expect(setIntervalSpy).toHaveBeenCalledWith(
         expect.any(Function),
-        60 * 60 * 1000
+        60 * 60 * 1000,
       );
 
       setIntervalSpy.mockClear();
@@ -178,7 +178,7 @@ describe('LinePlugin', () => {
 
       expect(setIntervalSpy).toHaveBeenCalledWith(
         expect.any(Function),
-        5 * 60 * 60 * 1000
+        5 * 60 * 60 * 1000,
       );
     });
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageEncryptor } from '../../src/crypto/messageEncryptor';
-import { KeyManager } from '../../src/crypto/keyManager';
+import type { KeyManager } from '../../src/crypto/keyManager';
 import { CryptoUtils } from '../../src/crypto/cryptoUtils';
 
 describe('MessageEncryptor', () => {
@@ -28,7 +28,10 @@ describe('MessageEncryptor', () => {
       const message = 'テストメッセージ123';
       const recipientUserId = 'user123';
 
-      const encrypted = await messageEncryptor.encryptMessage(message, recipientUserId);
+      const encrypted = await messageEncryptor.encryptMessage(
+        message,
+        recipientUserId,
+      );
 
       expect(encrypted).toBeDefined();
       expect(encrypted.encryptedContent).toBeDefined();
@@ -55,29 +58,40 @@ describe('MessageEncryptor', () => {
       const originalMessage = 'これは暗号化テストです！';
       const recipientUserId = 'user789';
 
-      const encrypted = await messageEncryptor.encryptMessage(originalMessage, recipientUserId);
+      const encrypted = await messageEncryptor.encryptMessage(
+        originalMessage,
+        recipientUserId,
+      );
 
       expect(encrypted).toBeDefined();
       expect(encrypted.encryptedContent).toBeDefined();
     });
 
     it('should handle version mismatch with warning', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+      const consoleWarnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {});
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       const message = 'test';
-      const encrypted = await messageEncryptor.encryptMessage(message, 'user123');
+      const encrypted = await messageEncryptor.encryptMessage(
+        message,
+        'user123',
+      );
       encrypted.version = '2.0';
 
       const messageWithEncrypted = {
         encrypted: true,
-        ...encrypted
+        ...encrypted,
       };
 
-      const processed = await messageEncryptor.processMessage(messageWithEncrypted);
+      const processed =
+        await messageEncryptor.processMessage(messageWithEncrypted);
 
       expect(processed).toBe('[メッセージを読み込めませんでした]');
-      
+
       consoleWarnSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     });
@@ -92,7 +106,7 @@ describe('MessageEncryptor', () => {
         version: '1.0',
         senderKeyId: 'key123',
         recipientUserId: 'user123',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       expect(messageEncryptor.isEncryptedMessage(encryptedMessage)).toBe(true);
@@ -102,7 +116,7 @@ describe('MessageEncryptor', () => {
       const legacyMessage = {
         text: 'This is a plain text message',
         timestamp: Date.now(),
-        userId: 'user123'
+        userId: 'user123',
       };
 
       expect(messageEncryptor.isLegacyMessage(legacyMessage)).toBe(true);
@@ -113,7 +127,10 @@ describe('MessageEncryptor', () => {
   describe('Transparent Message Processing', () => {
     it('should process encrypted messages', async () => {
       const originalMessage = 'Encrypted content';
-      const encrypted = await messageEncryptor.encryptMessage(originalMessage, 'user123');
+      const encrypted = await messageEncryptor.encryptMessage(
+        originalMessage,
+        'user123',
+      );
 
       const processed = await messageEncryptor.processMessage(encrypted);
 
@@ -123,14 +140,13 @@ describe('MessageEncryptor', () => {
     it('should process legacy plain text messages', async () => {
       const legacyMessage = {
         text: 'Plain text message',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       const processed = await messageEncryptor.processMessage(legacyMessage);
 
       expect(processed).toBe('Plain text message');
     });
-
 
     it('should handle string messages', async () => {
       const simpleString = 'Just a string';
@@ -139,13 +155,15 @@ describe('MessageEncryptor', () => {
     });
 
     it('should handle unknown message formats', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
+      const consoleWarnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {});
+
       const unknownFormat = { foo: 'bar', baz: 123 };
       const processed = await messageEncryptor.processMessage(unknownFormat);
 
       expect(processed).toBe(JSON.stringify(unknownFormat));
-      
+
       consoleWarnSpy.mockRestore();
     });
   });
@@ -155,7 +173,10 @@ describe('MessageEncryptor', () => {
       const messages = ['Message 1', 'Message 2', 'Message 3'];
       const recipientUserId = 'user123';
 
-      const encryptedMessages = await messageEncryptor.encryptBatch(messages, recipientUserId);
+      const encryptedMessages = await messageEncryptor.encryptBatch(
+        messages,
+        recipientUserId,
+      );
 
       expect(encryptedMessages).toHaveLength(3);
       expect(keyManager.getPublicKey).toHaveBeenCalledTimes(1);
@@ -172,10 +193,12 @@ describe('MessageEncryptor', () => {
 
   describe('Error Handling', () => {
     it('should throw error when encryption fails', async () => {
-      keyManager.getPublicKey = vi.fn(() => Promise.reject(new Error('Network error')));
+      keyManager.getPublicKey = vi.fn(() =>
+        Promise.reject(new Error('Network error')),
+      );
 
       await expect(
-        messageEncryptor.encryptMessage('test', 'user123')
+        messageEncryptor.encryptMessage('test', 'user123'),
       ).rejects.toThrow('Failed to encrypt message');
     });
 
@@ -187,11 +210,11 @@ describe('MessageEncryptor', () => {
         version: '1.0',
         senderKeyId: 'key123',
         recipientUserId: 'user123',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       await expect(
-        messageEncryptor.decryptMessage(invalidEncrypted)
+        messageEncryptor.decryptMessage(invalidEncrypted),
       ).rejects.toThrow('Failed to decrypt message');
     });
   });

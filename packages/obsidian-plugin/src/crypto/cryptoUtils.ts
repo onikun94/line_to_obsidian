@@ -14,7 +14,7 @@ export class CryptoUtils {
         hash: 'SHA-256',
       },
       true,
-      ['encrypt', 'decrypt']
+      ['encrypt', 'decrypt'],
     );
   }
 
@@ -28,7 +28,7 @@ export class CryptoUtils {
         length: 256,
       },
       true,
-      ['encrypt', 'decrypt']
+      ['encrypt', 'decrypt'],
     );
   }
 
@@ -37,7 +37,10 @@ export class CryptoUtils {
    */
   static async exportPublicKey(publicKey: CryptoKey): Promise<string> {
     const exported = await crypto.subtle.exportKey('spki', publicKey);
-    const exportedAsString = String.fromCharCode.apply(null, Array.from(new Uint8Array(exported)));
+    const exportedAsString = String.fromCharCode.apply(
+      null,
+      Array.from(new Uint8Array(exported)),
+    );
     const exportedAsBase64 = btoa(exportedAsString);
     return `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64.match(/.{1,64}/g)?.join('\n')}\n-----END PUBLIC KEY-----`;
   }
@@ -47,7 +50,10 @@ export class CryptoUtils {
    */
   static async exportPrivateKey(privateKey: CryptoKey): Promise<string> {
     const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
-    const exportedAsString = String.fromCharCode.apply(null, Array.from(new Uint8Array(exported)));
+    const exportedAsString = String.fromCharCode.apply(
+      null,
+      Array.from(new Uint8Array(exported)),
+    );
     const exportedAsBase64 = btoa(exportedAsString);
     return `-----BEGIN PRIVATE KEY-----\n${exportedAsBase64.match(/.{1,64}/g)?.join('\n')}\n-----END PRIVATE KEY-----`;
   }
@@ -58,9 +64,13 @@ export class CryptoUtils {
   static async importPublicKey(pem: string): Promise<CryptoKey> {
     const pemHeader = '-----BEGIN PUBLIC KEY-----';
     const pemFooter = '-----END PUBLIC KEY-----';
-    const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length).replace(/\s/g, '');
+    const pemContents = pem
+      .substring(pemHeader.length, pem.length - pemFooter.length)
+      .replace(/\s/g, '');
     const binaryDerString = atob(pemContents);
-    const binaryDer = new Uint8Array(Array.from(binaryDerString, char => char.charCodeAt(0)));
+    const binaryDer = new Uint8Array(
+      Array.from(binaryDerString, (char) => char.charCodeAt(0)),
+    );
 
     return await crypto.subtle.importKey(
       'spki',
@@ -70,7 +80,7 @@ export class CryptoUtils {
         hash: 'SHA-256',
       },
       true,
-      ['encrypt']
+      ['encrypt'],
     );
   }
 
@@ -80,9 +90,13 @@ export class CryptoUtils {
   static async importPrivateKey(pem: string): Promise<CryptoKey> {
     const pemHeader = '-----BEGIN PRIVATE KEY-----';
     const pemFooter = '-----END PRIVATE KEY-----';
-    const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length).replace(/\s/g, '');
+    const pemContents = pem
+      .substring(pemHeader.length, pem.length - pemFooter.length)
+      .replace(/\s/g, '');
     const binaryDerString = atob(pemContents);
-    const binaryDer = new Uint8Array(Array.from(binaryDerString, char => char.charCodeAt(0)));
+    const binaryDer = new Uint8Array(
+      Array.from(binaryDerString, (char) => char.charCodeAt(0)),
+    );
 
     return await crypto.subtle.importKey(
       'pkcs8',
@@ -92,14 +106,17 @@ export class CryptoUtils {
         hash: 'SHA-256',
       },
       true,
-      ['decrypt']
+      ['decrypt'],
     );
   }
 
   /**
    * メッセージをAES-GCMで暗号化
    */
-  static async encryptMessage(message: string, aesKey: CryptoKey): Promise<{ encrypted: ArrayBuffer; iv: Uint8Array }> {
+  static async encryptMessage(
+    message: string,
+    aesKey: CryptoKey,
+  ): Promise<{ encrypted: ArrayBuffer; iv: Uint8Array }> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt(
       {
@@ -107,7 +124,7 @@ export class CryptoUtils {
         iv: iv,
       },
       aesKey,
-      this.encoder.encode(message)
+      CryptoUtils.encoder.encode(message),
     );
 
     return { encrypted, iv };
@@ -116,51 +133,64 @@ export class CryptoUtils {
   /**
    * AES-GCMで暗号化されたメッセージを復号化
    */
-  static async decryptMessage(encrypted: ArrayBuffer, aesKey: CryptoKey, iv: Uint8Array): Promise<string> {
+  static async decryptMessage(
+    encrypted: ArrayBuffer,
+    aesKey: CryptoKey,
+    iv: Uint8Array,
+  ): Promise<string> {
     const decrypted = await crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
         iv: iv,
       },
       aesKey,
-      encrypted
+      encrypted,
     );
 
-    return this.decoder.decode(decrypted);
+    return CryptoUtils.decoder.decode(decrypted);
   }
 
   /**
    * AES鍵をRSA公開鍵で暗号化
    */
-  static async encryptAESKey(aesKey: CryptoKey, publicKey: CryptoKey): Promise<ArrayBuffer> {
+  static async encryptAESKey(
+    aesKey: CryptoKey,
+    publicKey: CryptoKey,
+  ): Promise<ArrayBuffer> {
     const exportedKey = await crypto.subtle.exportKey('raw', aesKey);
     return await crypto.subtle.encrypt(
       {
         name: 'RSA-OAEP',
       },
       publicKey,
-      exportedKey
+      exportedKey,
     );
   }
 
   /**
    * RSA秘密鍵で暗号化されたAES鍵を復号化
    */
-  static async decryptAESKey(encryptedKey: ArrayBuffer, privateKey: CryptoKey): Promise<CryptoKey> {
+  static async decryptAESKey(
+    encryptedKey: ArrayBuffer,
+    privateKey: CryptoKey,
+  ): Promise<CryptoKey> {
     // Node.js環境では、ArrayBufferの判定が特殊なケースがある
     let keyBuffer: ArrayBuffer;
-    
+
     if (encryptedKey === null || encryptedKey === undefined) {
       throw new Error('Encrypted key is null or undefined');
     }
-    
+
     // Node.jsとブラウザ環境の両方で動作するように修正
     if (encryptedKey instanceof ArrayBuffer) {
       keyBuffer = encryptedKey;
     } else if (ArrayBuffer.isView(encryptedKey)) {
       // TypedArrayやDataViewの場合
       const view = encryptedKey as ArrayBufferView;
-      keyBuffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+      keyBuffer = view.buffer.slice(
+        view.byteOffset,
+        view.byteOffset + view.byteLength,
+      );
     } else {
       // encryptedKeyの型がArrayBufferと定義されているため、ここには到達しないはず
       // 念のためのフォールバック
@@ -172,7 +202,7 @@ export class CryptoUtils {
         name: 'RSA-OAEP',
       },
       privateKey,
-      keyBuffer
+      keyBuffer,
     );
 
     return await crypto.subtle.importKey(
@@ -183,7 +213,7 @@ export class CryptoUtils {
         length: 256,
       },
       true,
-      ['encrypt', 'decrypt']
+      ['encrypt', 'decrypt'],
     );
   }
 
@@ -209,7 +239,10 @@ export class CryptoUtils {
       bytes[i] = binary.charCodeAt(i);
     }
     // ArrayBufferを正しく返す
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    return bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
   }
 
   /**
@@ -222,28 +255,31 @@ export class CryptoUtils {
       platform: navigator.platform,
       hardwareConcurrency: navigator.hardwareConcurrency,
       timestamp: Date.now(),
-      random: crypto.getRandomValues(new Uint8Array(16))
+      random: crypto.getRandomValues(new Uint8Array(16)),
     };
-    
-    const data = this.encoder.encode(JSON.stringify(fingerprint));
+
+    const data = CryptoUtils.encoder.encode(JSON.stringify(fingerprint));
     const hash = await crypto.subtle.digest('SHA-256', data);
-    return this.arrayBufferToBase64(hash);
+    return CryptoUtils.arrayBufferToBase64(hash);
   }
 
   /**
    * デバイスIDから暗号化キーを派生
    */
-  static async deriveKeyFromDeviceId(deviceId: string, salt?: Uint8Array): Promise<CryptoKey> {
+  static async deriveKeyFromDeviceId(
+    deviceId: string,
+    salt?: Uint8Array,
+  ): Promise<CryptoKey> {
     if (!salt) {
       salt = crypto.getRandomValues(new Uint8Array(16));
     }
 
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
-      this.encoder.encode(deviceId),
+      CryptoUtils.encoder.encode(deviceId),
       'PBKDF2',
       false,
-      ['deriveBits', 'deriveKey']
+      ['deriveBits', 'deriveKey'],
     );
 
     return await crypto.subtle.deriveKey(
@@ -259,7 +295,7 @@ export class CryptoUtils {
         length: 256,
       },
       true,
-      ['encrypt', 'decrypt']
+      ['encrypt', 'decrypt'],
     );
   }
 }

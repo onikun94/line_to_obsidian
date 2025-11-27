@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 export class Plugin {
   app: any;
   manifest: any;
-  
+
   constructor(app: any, manifest: any) {
     this.app = app;
     this.manifest = manifest;
@@ -111,4 +111,4 @@ export default {
   normalizePath,
   requestUrl,
   mockApp,
-}; 
+};

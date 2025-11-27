@@ -14,13 +14,13 @@ export default defineConfig({
         '**/*.test.ts',
         '**/*.spec.ts',
         'dist/',
-        'wrangler.toml'
-      ]
-    }
+        'wrangler.toml',
+      ],
+    },
   },
   resolve: {
     alias: {
-      '@': './src'
-    }
-  }
-}); 
+      '@': './src',
+    },
+  },
+});
