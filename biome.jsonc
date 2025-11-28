@@ -11,7 +11,8 @@
       "packages/**/*.{js,jsx,ts,tsx}",
       "**/*.json",
       "!node_modules",
-      "!!**/dist"
+      "!!**/dist",
+      "!packages/cloudflare-worker/worker-configuration.d.ts"
     ]
   },
   "formatter": {

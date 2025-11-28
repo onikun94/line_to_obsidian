@@ -17,6 +17,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"],
+  "include": ["worker-configuration.d.ts", "src/**/*.ts"],
   "exclude": ["node_modules"]
 }
