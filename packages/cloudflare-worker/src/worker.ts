@@ -2,6 +2,7 @@ import { validateSignature, type WebhookEvent } from '@line/bot-sdk';
 import { MessagingApiClient } from '@line/bot-sdk/dist/messaging-api/api';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { fetchArticleMarkdown, isUrlOnly } from './lib/url-markdown-collector';
 
 type LineMessage = {
   timestamp: number;
@@ -10,6 +11,15 @@ type LineMessage = {
   text: string;
   vaultId: string;
   synced?: boolean;
+  isUrlOnly: boolean;
+  article?: {
+    url: string;
+    title: string;
+    description?: string;
+    author?: string;
+    image?: string;
+    markdown: string;
+  };
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -243,13 +253,24 @@ app.post('/webhook', async (c) => {
           continue;
         }
 
+        const text = event.message.text;
+        const urlOnly = isUrlOnly(text);
+
+        const articleResult = urlOnly
+          ? await fetchArticleMarkdown({ url: text.trim(), env: c.env })
+          : null;
+
+        const article = articleResult ?? undefined;
+
         const message: LineMessage = {
           timestamp: event.timestamp,
           messageId: event.message.id,
           userId: userId,
-          text: event.message.text,
+          text,
           vaultId: vaultId,
           synced: false,
+          isUrlOnly: urlOnly,
+          article,
         };
 
         await c.env.LINE_MESSAGES.put(

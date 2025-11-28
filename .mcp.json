@@ -18,6 +18,17 @@
         "false"
       ],
       "env": {}
+    },
+    "kiri": {
+      "command": "npx",
+      "args": [
+        "kiri-mcp-server@latest",
+        "--repo",
+        ".",
+        "--db",
+        ".kiri/index.duckdb",
+        "--watch"
+      ]
     }
   }
 }

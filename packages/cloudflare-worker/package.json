@@ -15,6 +15,7 @@
   "dependencies": {
     "@line/bot-sdk": "^10.5.0",
     "buffer": "^6.0.3",
+    "cloudflare": "^5.2.0",
     "crypto-browserify": "^3.12.1",
     "events": "^3.3.0",
     "hono": "^4.10.7",
