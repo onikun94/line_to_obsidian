@@ -2,6 +2,8 @@ import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
 import dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const isProd = process.env.NODE_ENV === 'production';
 const isCI = process.env.CI === 'true';
@@ -24,6 +26,29 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 
+const outdir = './dist';
+const outfile = path.join(outdir, 'main.js');
+
+const copyManifestPlugin = {
+  name: 'copy-manifest',
+  setup(build) {
+    build.onEnd(async (result) => {
+      if (result.errors.length > 0) {
+        console.log('Build failed, not copying manifest.json');
+        return;
+      }
+      const sourceManifest = 'manifest.json';
+      const destManifest = path.join(outdir, 'manifest.json');
+      try {
+        await fs.promises.mkdir(outdir, { recursive: true });
+        await fs.promises.copyFile(sourceManifest, destManifest);
+        console.log(`Copied ${sourceManifest} to ${destManifest}`);
+      } catch (err) {
+        console.error(`Error copying manifest.json: ${err}`);
+      }
+    });
+  },
+};
 
 const context = await esbuild.context({
   banner: {
@@ -64,8 +89,9 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: 'main.js', 
-  platform: 'node'
+  outfile: outfile,
+  platform: 'node',
+  plugins: [copyManifestPlugin]
 });
 
 if (prod) {

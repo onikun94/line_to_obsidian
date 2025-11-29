@@ -57,6 +57,13 @@ app.use('*', async (c, next) => {
 });
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
+app.post('/health', async (c) => {
+  const signature = c.req.header('x-line-signature');
+  if (!signature) {
+    return c.json({ error: 'Missing signature' }, 401);
+  }
+  return c.json({ status: 'ok' });
+});
 
 app.get('/messages/:vaultId/:userId', async (c) => {
   try {

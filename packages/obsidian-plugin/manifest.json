@@ -1,0 +1,10 @@
+{
+  "id": "my-line-notes-sync",
+  "name": "My LINE Notes Sync",
+  "version": "0.0.1",
+  "minAppVersion": "1.0.0",
+  "description": "Sync messages from LINE to my notes.",
+  "author": "Suntory-Y-Water",
+  "authorUrl": "https://github.com/Suntory-Y-Water",
+  "isDesktopOnly": true
+}
