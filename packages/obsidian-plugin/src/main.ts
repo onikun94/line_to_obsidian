@@ -1,21 +1,15 @@
 import {
   type App,
-  Modal,
   Notice,
   normalizePath,
   Plugin,
   PluginSettingTab,
   requestUrl,
   Setting,
-  TextAreaComponent,
   TFile,
-  TFolder,
   type ToggleComponent,
 } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
-import { E2EEErrorHandler } from './crypto/errorHandler';
-import { KeyManager } from './crypto/keyManager';
-import { MessageEncryptor } from './crypto/messageEncryptor';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -26,12 +20,14 @@ interface LinePluginSettings {
   syncOnStartup: boolean;
   organizeByDate: boolean;
   fileNameTemplate: string;
-  e2eeEnabled: boolean;
   groupMessagesByDate: boolean;
   groupedMessageTemplate: string;
   groupedFrontmatterTemplate: string;
   groupedFileNameTemplate: string;
   apiUrl?: string;
+  enableArticleExtraction: boolean;
+  literatureNoteFolder: string;
+  literatureNoteFrontmatterTemplate: string;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -43,11 +39,14 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   syncOnStartup: false,
   organizeByDate: false,
   fileNameTemplate: '{date}-{messageId}',
-  e2eeEnabled: true,
   groupMessagesByDate: false,
   groupedMessageTemplate: '{time}: {text}',
   groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
   groupedFileNameTemplate: '{date}',
+  enableArticleExtraction: true,
+  literatureNoteFolder: 'LINE/Literature',
+  literatureNoteFrontmatterTemplate:
+    'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
 };
 
 interface LineMessage {
@@ -57,13 +56,15 @@ interface LineMessage {
   text: string;
   vaultId: string;
   synced?: boolean;
-  encrypted?: boolean;
-  encryptedContent?: string;
-  encryptedAESKey?: string;
-  iv?: string;
-  senderKeyId?: string;
-  recipientUserId?: string;
-  version?: string;
+  isUrlOnly: boolean;
+  article?: {
+    url: string;
+    title: string;
+    description?: string;
+    author?: string;
+    image?: string;
+    markdown: string;
+  };
 }
 
 // Helper function for template parsing
@@ -90,32 +91,27 @@ function parseFrontmatterTemplate(
     .replace(/{datecompact}/g, dateString);
 }
 
+/**
+ * タイトル文字列をファイル名用のslugに変換する
+ * 日本語や特殊文字を含むタイトルをASCII文字列に変換し、ファイル名として使用可能にする
+ */
+function slugify(text: string, maxLength = 50): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-') // スペースとアンダースコアをハイフンに置換
+    .replace(/[^\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF-]/g, '') // 英数字、日本語、ハイフン以外を削除
+    .replace(/--+/g, '-') // 連続するハイフンを1つに
+    .replace(/^-+|-+$/g, '') // 先頭と末尾のハイフンを削除
+    .substring(0, maxLength); // 最大長で切り詰め
+}
+
 export default class LinePlugin extends Plugin {
   settings: LinePluginSettings;
   syncIntervalId: number | null = null;
-  keyManager: KeyManager;
-  messageEncryptor: MessageEncryptor;
-  errorHandler: E2EEErrorHandler;
 
   async onload() {
     await this.loadSettings();
-
-    this.keyManager = new KeyManager(this);
-    this.messageEncryptor = new MessageEncryptor(this.keyManager);
-    this.errorHandler = new E2EEErrorHandler(
-      this.keyManager,
-      this.messageEncryptor,
-    );
-
-    if (this.settings.lineUserId && this.settings.vaultId) {
-      try {
-        await this.keyManager.initialize();
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize E2EE:', error);
-        }
-      }
-    }
 
     this.addSettingTab(new LineSettingTab(this.app, this));
 
@@ -299,18 +295,6 @@ export default class LinePlugin extends Plugin {
       return;
     }
 
-    const keys = await this.keyManager.loadKeys();
-
-    if (!keys && this.settings.lineUserId) {
-      try {
-        await this.keyManager.initialize();
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize E2EE during sync:', error);
-        }
-      }
-    }
-
     try {
       if (!isAutoSync) {
         new Notice('Syncing LINE messages...');
@@ -335,7 +319,7 @@ export default class LinePlugin extends Plugin {
       let messages: LineMessage[];
       try {
         messages = JSON.parse(responseText) as LineMessage[];
-      } catch (parseError) {
+      } catch {
         throw new Error('Invalid response format');
       }
 
@@ -354,6 +338,7 @@ export default class LinePlugin extends Plugin {
           if (!messagesByDate.has(dateString)) {
             messagesByDate.set(dateString, []);
           }
+          // biome-ignore lint/style/noNonNullAssertion: いったん
           messagesByDate.get(dateString)!.push(message);
         }
 
@@ -405,27 +390,28 @@ export default class LinePlugin extends Plugin {
             // Process all messages for this date
             const newMessages: string[] = [];
             for (const message of dateMessages) {
-              let messageText: string;
-              try {
-                messageText =
-                  await this.messageEncryptor.processMessage(message);
-              } catch (error) {
-                try {
-                  messageText = await this.errorHandler.handleError(
-                    error as Error,
-                    `message_${message.messageId}`,
-                  );
-                } catch (handlerError) {
-                  if (process.env.NODE_ENV === 'development') {
-                    console.error(
-                      `Failed to process message ${message.messageId}:`,
-                      handlerError,
-                    );
-                  }
-                  messageText =
-                    message.text || '[メッセージを読み込めませんでした]';
+              // URL記事抽出機能: isUrlOnlyかつarticleが存在する場合、LiteratureNoteを作成
+              if (
+                this.settings.enableArticleExtraction &&
+                message.isUrlOnly &&
+                message.article
+              ) {
+                const literatureTitle = await this.createLiteratureNote(
+                  message,
+                  message.article,
+                );
+                if (literatureTitle) {
+                  // Dailyノートにリンクを追加
+                  const messageContent = `[[${literatureTitle}]] - ${message.article.url}`;
+                  newMessages.push(messageContent);
+                  syncedMessageIds.push(message.messageId);
+                  newMessageCount++;
+                  continue;
                 }
               }
+
+              const messageText =
+                message.text || '[メッセージを読み込めませんでした]';
 
               const messageContent = this.parseMessageTemplate(
                 this.settings.groupedMessageTemplate,
@@ -481,6 +467,31 @@ export default class LinePlugin extends Plugin {
             continue;
           }
 
+          // URL記事抽出機能: isUrlOnlyかつarticleが存在する場合、LiteratureNoteを作成
+          if (
+            this.settings.enableArticleExtraction &&
+            message.isUrlOnly &&
+            message.article
+          ) {
+            try {
+              const literatureTitle = await this.createLiteratureNote(
+                message,
+                message.article,
+              );
+              if (literatureTitle) {
+                newMessageCount++;
+                syncedMessageIds.push(message.messageId);
+                continue;
+              }
+            } catch (err) {
+              if (process.env.NODE_ENV === 'development') {
+                console.error(
+                  `Error creating literature note for message ${message.messageId}: ${err}`,
+                );
+              }
+            }
+          }
+
           let folderPath: string;
           if (this.settings.organizeByDate) {
             const dateString = this.getJSTDateString(message.timestamp);
@@ -514,26 +525,8 @@ export default class LinePlugin extends Plugin {
               await this.app.vault.createFolder(normalizedTargetFolderPath);
             }
 
-            let messageText: string;
-            try {
-              messageText = await this.messageEncryptor.processMessage(message);
-            } catch (error) {
-              try {
-                messageText = await this.errorHandler.handleError(
-                  error as Error,
-                  `message_${message.messageId}`,
-                );
-              } catch (handlerError) {
-                if (process.env.NODE_ENV === 'development') {
-                  console.error(
-                    `Failed to process message ${message.messageId}:`,
-                    handlerError,
-                  );
-                }
-                messageText =
-                  message.text || '[メッセージを読み込めませんでした]';
-              }
-            }
+            const messageText =
+              message.text || '[メッセージを読み込めませんでした]';
 
             const content = [
               `---`,
@@ -572,6 +565,75 @@ export default class LinePlugin extends Plugin {
       new Notice(
         `Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
+    }
+  }
+
+  /**
+   * LiteratureNoteファイルを作成する
+   * URL記事抽出機能で取得したMarkdownコンテンツをLiteratureNoteとして保存
+   */
+  private async createLiteratureNote(
+    message: LineMessage,
+    article: {
+      url: string;
+      title: string;
+      description?: string;
+      author?: string;
+      image?: string;
+      markdown: string;
+    },
+  ): Promise<string | null> {
+    try {
+      // フォルダ作成
+      const folderPath = normalizePath(this.settings.literatureNoteFolder);
+      const folder = this.app.vault.getAbstractFileByPath(folderPath);
+      if (!folder) {
+        await this.app.vault.createFolder(folderPath);
+      }
+
+      // ファイル名生成（タイトルをスラッグ化）
+      const baseFileName = slugify(article.title);
+      const fileName = `${baseFileName}.md`;
+
+      // 重複チェック
+      let uniqueFileName = fileName;
+      let counter = 1;
+      while (true) {
+        const fullPath = normalizePath(`${folderPath}/${uniqueFileName}`);
+        const existingFile = this.app.vault.getAbstractFileByPath(fullPath);
+        if (!existingFile) {
+          break;
+        }
+        const baseName = baseFileName;
+        uniqueFileName = `${baseName}-${Date.now()}-${counter}.md`;
+        counter++;
+      }
+
+      // Frontmatterテンプレート処理
+      const createdISO = this.getJSTISOString(message.timestamp);
+      const frontmatter = this.settings.literatureNoteFrontmatterTemplate
+        .replace(/{title}/g, article.title)
+        .replace(/{url}/g, article.url)
+        .replace(/{author}/g, article.author || '')
+        .replace(/{created}/g, createdISO)
+        .replace(/{description}/g, article.description || '')
+        .replace(/{image}/g, article.image || '');
+
+      // ファイル内容生成
+      const content = ['---', frontmatter, '---', '', article.markdown].join(
+        '\n',
+      );
+
+      // ファイル作成
+      const filePath = normalizePath(`${folderPath}/${uniqueFileName}`);
+      await this.app.vault.create(filePath, content);
+
+      return uniqueFileName.replace(/\.md$/, '');
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to create literature note:', error);
+      }
+      return null;
     }
   }
 
@@ -634,14 +696,6 @@ export default class LinePlugin extends Plugin {
 
       if (response.status !== 200) {
         throw new Error('マッピングの登録に失敗しました');
-      }
-
-      try {
-        await this.keyManager.initialize();
-      } catch (keyError) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize keys after mapping:', keyError);
-        }
       }
 
       new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
@@ -708,7 +762,28 @@ class LineSettingTab extends PluginSettingTab {
           }),
       );
 
-    const autoSyncSetting = new Setting(containerEl)
+    const syncIntervalSetting = new Setting(containerEl)
+      .setName('Sync interval')
+      .setDesc('LINEメッセージを同期する間隔（時間単位）')
+      .addDropdown((dropdown) => {
+        const hours = [1, 2, 3, 4, 5];
+        hours.forEach((hour) => {
+          dropdown.addOption(hour.toString(), `${hour}時間`);
+        });
+
+        dropdown.setValue(this.plugin.settings.syncInterval.toString());
+        dropdown.onChange(async (value) => {
+          const interval = parseInt(value, 10);
+          if (!Number.isNaN(interval) && interval >= 1 && interval <= 5) {
+            this.plugin.settings.syncInterval = interval;
+            await this.plugin.saveSettings();
+          }
+        });
+      });
+
+    syncIntervalSetting.settingEl.toggle(this.plugin.settings.autoSync);
+
+    new Setting(containerEl)
       .setName('Auto sync')
       .setDesc('LINEメッセージを自動的に同期するかどうか')
       .addToggle((toggle) =>
@@ -721,27 +796,6 @@ class LineSettingTab extends PluginSettingTab {
             syncIntervalSetting.settingEl.toggle(value);
           }),
       );
-
-    const syncIntervalSetting = new Setting(containerEl)
-      .setName('Sync interval')
-      .setDesc('LINEメッセージを同期する間隔（時間単位）')
-      .addDropdown((dropdown) => {
-        const hours = [1, 2, 3, 4, 5];
-        hours.forEach((hour) => {
-          dropdown.addOption(hour.toString(), `${hour}時間`);
-        });
-
-        dropdown.setValue(this.plugin.settings.syncInterval.toString());
-        dropdown.onChange(async (value) => {
-          const interval = parseInt(value);
-          if (!isNaN(interval) && interval >= 1 && interval <= 5) {
-            this.plugin.settings.syncInterval = interval;
-            await this.plugin.saveSettings();
-          }
-        });
-      });
-
-    syncIntervalSetting.settingEl.toggle(this.plugin.settings.autoSync);
 
     new Setting(containerEl)
       .setName('Sync on startup')
@@ -756,7 +810,7 @@ class LineSettingTab extends PluginSettingTab {
       );
 
     let organizeBydateToggle: ToggleComponent;
-    const organizeBydateSetting = new Setting(containerEl)
+    new Setting(containerEl)
       .setName('Organize by date')
       .setDesc(
         '日付ごとにフォルダを作成してメッセージを整理するかどうか（注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます）',
@@ -929,6 +983,65 @@ class LineSettingTab extends PluginSettingTab {
       ul.createEl('li', { text: '{messageId}: メッセージID' });
       ul.createEl('li', { text: '{userId}: ユーザーID' });
       ul.createEl('li', { text: '{timestamp}: Unixタイムスタンプ' });
+    });
+
+    // LiteratureNote機能の設定
+    containerEl.createEl('h3', { text: 'Literature Note Settings' });
+
+    new Setting(containerEl)
+      .setName('Enable Article Extraction')
+      .setDesc('URL単体メッセージからLiteratureNoteを自動生成します')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableArticleExtraction)
+          .onChange(async (value) => {
+            this.plugin.settings.enableArticleExtraction = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName('Literature Note Folder')
+      .setDesc('LiteratureNoteを保存するフォルダパス')
+      .addText((text) =>
+        text
+          .setPlaceholder('LINE/Literature')
+          .setValue(this.plugin.settings.literatureNoteFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.literatureNoteFolder =
+              value || 'LINE/Literature';
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName('Literature Note Frontmatter Template')
+      .setDesc('LiteratureNoteのFrontmatterテンプレート')
+      .addTextArea((text) =>
+        text
+          .setPlaceholder(
+            'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}',
+          )
+          .setValue(this.plugin.settings.literatureNoteFrontmatterTemplate)
+          .onChange(async (value) => {
+            this.plugin.settings.literatureNoteFrontmatterTemplate =
+              value ||
+              'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]';
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    containerEl.createEl('div', {
+      text: 'Literature Note変数の説明:',
+      cls: 'setting-item-description',
+    });
+    containerEl.createEl('ul', {}, (ul) => {
+      ul.createEl('li', { text: '{title}: 記事タイトル' });
+      ul.createEl('li', { text: '{url}: 記事URL' });
+      ul.createEl('li', { text: '{author}: 著者名' });
+      ul.createEl('li', { text: '{created}: 作成日時（ISO形式）' });
+      ul.createEl('li', { text: '{description}: 記事説明' });
+      ul.createEl('li', { text: '{image}: 記事画像URL' });
     });
 
     new Setting(containerEl)

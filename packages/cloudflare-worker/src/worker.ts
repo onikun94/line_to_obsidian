@@ -1,5 +1,11 @@
-import { validateSignature, type WebhookEvent } from '@line/bot-sdk';
-import { MessagingApiClient } from '@line/bot-sdk/dist/messaging-api/api';
+import {
+  messagingApi,
+  validateSignature,
+  type WebhookEvent,
+} from '@line/bot-sdk';
+
+const { MessagingApiClient } = messagingApi;
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { fetchArticleMarkdown, isUrlOnly } from './lib/url-markdown-collector';
