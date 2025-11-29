@@ -13,7 +13,16 @@ import Cloudflare from 'cloudflare';
  */
 export function isUrlOnly(text: string): boolean {
   const trimmed = text.trim();
-  return /^https?:\/\/.+$/.test(trimmed) && !trimmed.includes('\n');
+  if (trimmed.includes('\n') || trimmed.includes(' ')) return false;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    // URL#href で正規化されるため、元の文字列と一致するかだけ緩く確認
+    return trimmed === parsed.href || trimmed === parsed.href.slice(0, -1);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -84,43 +93,41 @@ export async function fetchArticleMarkdown({
   image?: string;
   markdown: string;
 } | null> {
-  try {
-    const htmlResponse = await fetch(url);
-    const html = await htmlResponse.text();
-
-    const title = extractTitle(html);
-    const description = extractOgpMeta(html, 'og:description');
-    const author = extractOgpMeta(html, 'article:author');
-    const image = extractOgpMeta(html, 'og:image');
-
-    const client = new Cloudflare({
-      apiToken: env.CLOUDFLARE_API_TOKEN,
-    });
-
-    const markdown = await client.browserRendering.markdown.create({
-      account_id: env.CLOUDFLARE_ACCOUNT_ID,
-      url,
-      rejectResourceTypes: ['stylesheet', 'image', 'media', 'font'],
-      rejectRequestPattern: [
-        '/^.*\\.(css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/',
-      ],
-      addScriptTag: [
-        {
-          content: `document.querySelectorAll('aside, header, footer').forEach(el => el.remove());`,
-        },
-      ],
-    });
-
-    return {
-      url,
-      title,
-      description,
-      author,
-      image,
-      markdown,
-    };
-  } catch (error) {
-    console.error('Failed to fetch article markdown:', error);
+  const htmlResponse = await fetch(url);
+  if (!htmlResponse.ok) {
     return null;
   }
+  const html = await htmlResponse.text();
+
+  const title = extractTitle(html);
+  const description = extractOgpMeta(html, 'og:description');
+  const author = extractOgpMeta(html, 'article:author');
+  const image = extractOgpMeta(html, 'og:image');
+
+  const client = new Cloudflare({
+    apiToken: env.CLOUDFLARE_API_TOKEN,
+  });
+
+  const markdown = await client.browserRendering.markdown.create({
+    account_id: env.CLOUDFLARE_ACCOUNT_ID,
+    url,
+    rejectResourceTypes: ['stylesheet', 'image', 'media', 'font'],
+    rejectRequestPattern: [
+      '/^.*\\.(css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/',
+    ],
+    addScriptTag: [
+      {
+        content: `document.querySelectorAll('aside, header, footer').forEach(el => el.remove());`,
+      },
+    ],
+  });
+
+  return {
+    url,
+    title,
+    description,
+    author,
+    image,
+    markdown,
+  };
 }

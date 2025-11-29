@@ -1,5 +1,7 @@
 import {
+  type MessageEvent,
   messagingApi,
+  type TextEventMessage,
   validateSignature,
   type WebhookEvent,
 } from '@line/bot-sdk';
@@ -173,7 +175,8 @@ app.post('/messages/update-sync-status', async (c) => {
       return c.json({ error: 'Missing vaultId or messageIds' }, 400);
     }
 
-    if (!userId) {
+    // userIDが特定のユーザー以外アクセスできないようにする
+    if (!userId || userId !== c.env.LINE_USER_ID) {
       return c.json({ error: 'Missing userId' }, 400);
     }
 
@@ -239,59 +242,27 @@ app.post('/webhook', async (c) => {
     }
 
     const events = JSON.parse(body).events as WebhookEvent[];
+    const backgroundTasks: Promise<void>[] = [];
 
     for (const event of events) {
-      if (event.type === 'message' && event.message.type === 'text') {
-        const userId = event.source.userId;
-        if (!userId) {
-          console.error('Missing userId in event');
-          continue;
-        }
+      if (isTextMessageEvent(event)) {
+        backgroundTasks.push(
+          (async () => {
+            const message = await buildLineMessage({ event, env: c.env });
+            if (!message) return;
 
-        const vaultId = await c.env.LINE_USER_MAPPINGS.get(userId);
-        if (!vaultId) {
-          console.error(`No vault mapping found for user ${userId}`);
-          const client = new MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN,
-          });
-          await client.replyMessage({
-            replyToken: event.replyToken,
-            messages: [
-              {
-                type: 'text',
-                text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`,
-              },
-            ],
-          });
-          continue;
-        }
-
-        const text = event.message.text;
-        const urlOnly = isUrlOnly(text);
-
-        const articleResult = urlOnly
-          ? await fetchArticleMarkdown({ url: text.trim(), env: c.env })
-          : null;
-
-        const article = articleResult ?? undefined;
-
-        const message: LineMessage = {
-          timestamp: event.timestamp,
-          messageId: event.message.id,
-          userId: userId,
-          text,
-          vaultId: vaultId,
-          synced: false,
-          isUrlOnly: urlOnly,
-          article,
-        };
-
-        await c.env.LINE_MESSAGES.put(
-          `${vaultId}/${userId}/${event.message.id}`,
-          JSON.stringify(message),
-          { expirationTtl: 60 * 60 * 24 * 10 },
+            await c.env.LINE_MESSAGES.put(
+              `${message.vaultId}/${message.userId}/${message.messageId}`,
+              JSON.stringify(message),
+              { expirationTtl: 60 * 60 * 24 * 10 },
+            );
+          })(),
         );
       }
+    }
+
+    if (backgroundTasks.length > 0) {
+      c.executionCtx.waitUntil(Promise.all(backgroundTasks));
     }
 
     return c.json({ status: 'ok' });
@@ -308,3 +279,88 @@ app.post('/webhook', async (c) => {
 });
 
 export default app;
+
+/**
+ * イベントがテキストメッセージか判定する。
+ *
+ * @example
+ * ```ts
+ * if (isTextMessageEvent(event)) {
+ *   console.log(event.message.text);
+ * }
+ * ```
+ */
+function isTextMessageEvent(
+  event: WebhookEvent,
+): event is MessageEvent & { message: TextEventMessage } {
+  return event.type === 'message' && event.message.type === 'text';
+}
+
+/**
+ * テキストメッセージイベントから保存用データを生成する。
+ *
+ * @example
+ * ```ts
+ * const message = await buildLineMessage({ event, env });
+ * if (message) {
+ *   // KVに保存するなど
+ * }
+ * ```
+ */
+async function buildLineMessage({
+  event,
+  env,
+}: {
+  event: MessageEvent & { message: TextEventMessage };
+  env: Env;
+}): Promise<LineMessage | null> {
+  const userId = event.source.userId;
+  if (!userId) {
+    console.error('Missing userId in event');
+    return null;
+  }
+
+  const vaultId = await env.LINE_USER_MAPPINGS.get(userId);
+  if (!vaultId) {
+    console.error(`No vault mapping found for user ${userId}`);
+    const client = new MessagingApiClient({
+      channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN,
+    });
+    await client.replyMessage({
+      replyToken: event.replyToken,
+      messages: [
+        {
+          type: 'text',
+          text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`,
+        },
+      ],
+    });
+    return null;
+  }
+
+  const text = event.message.text;
+  const urlOnly = isUrlOnly(text);
+  const articleResult = urlOnly
+    ? await (async () => {
+        try {
+          return await fetchArticleMarkdown({
+            url: text.trim(),
+            env,
+          });
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+
+  return {
+    timestamp: event.timestamp,
+    messageId: event.message.id,
+    userId,
+    text,
+    vaultId,
+    synced: false,
+    isUrlOnly: urlOnly,
+    article: articleResult ?? undefined,
+  };
+}
