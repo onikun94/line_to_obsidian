@@ -142,12 +142,18 @@ export default class LinePlugin extends Plugin {
 
   private getJSTDateString(timestamp: number): string {
     const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0].replace(/-/g, '');
+    const year = jstDate.getFullYear();
+    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
+    const day = String(jstDate.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
   }
 
   private getJSTDateWithHyphens(timestamp: number): string {
     const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0];
+    const year = jstDate.getFullYear();
+    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
+    const day = String(jstDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private getJSTISOString(timestamp: number): string {
