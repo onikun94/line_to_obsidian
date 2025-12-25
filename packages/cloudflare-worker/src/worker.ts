@@ -274,6 +274,24 @@ app.post('/webhook', async (c: Context) => {
           continue;
         }
 
+        // Handle /myid command - always show LINE User ID regardless of mapping status
+        if (event.message.text === '/myid' || event.message.text === 'IDを確認') {
+          const client = new line.Client({
+            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+          });
+          const existingVaultId = await getVaultIdForUser(c, userId);
+
+          const replyText = existingVaultId
+            ? `あなたのLINE User ID: ${userId}\n\n現在 Vault と連携中です。\n別のVaultに変更したい場合は、Obsidianプラグインの設定から「Reset Mapping」を実行してください。`
+            : `あなたのLINE User ID: ${userId}\n\nObsidianプラグインの設定画面でこのIDを入力し、「Register Mapping」をクリックしてください。`;
+
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: replyText
+          });
+          continue;
+        }
+
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId}`);
