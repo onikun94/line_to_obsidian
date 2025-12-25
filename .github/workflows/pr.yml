@@ -44,6 +44,8 @@ jobs:
       
       - name: Run tests - Obsidian Plugin
         run: pnpm --filter obsidian-plugin test:run
+        env:
+          TZ: Asia/Tokyo
       
       - name: Run tests - CloudFlare Worker
         run: pnpm --filter cloudflare-worker test:run
