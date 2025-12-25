@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
     return `${BASE_URL}/messages/${vaultId}/${userId}`;
   },
   MAPPING: `${BASE_URL}/mapping`,
+  DELETE_MAPPING: `${BASE_URL}/mapping`,
   UPDATE_SYNC_STATUS: `${BASE_URL}/messages/update-sync-status`,
   REGISTER_PUBLIC_KEY: `${BASE_URL}/publickey/register`,
   GET_PUBLIC_KEY: (userId: string): string => `${BASE_URL}/publickey/${userId}`,

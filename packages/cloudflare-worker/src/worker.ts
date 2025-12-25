@@ -178,6 +178,30 @@ app.post('/mapping', async (c: Context) => {
   }
 });
 
+app.delete('/mapping', async (c: Context) => {
+  try {
+    const { userId, vaultId } = await c.req.json();
+    if (!userId || !vaultId) {
+      return c.json({ error: 'Missing userId or vaultId' }, 400);
+    }
+
+    // Verify that the vaultId matches before deleting
+    const storedVaultId = await getVaultIdForUser(c, userId);
+    if (!storedVaultId || storedVaultId !== vaultId) {
+      return c.json({ error: 'Unauthorized: VaultId does not match' }, 403);
+    }
+
+    await c.env.LINE_USER_MAPPINGS.delete(userId);
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Error in DELETE /mapping:', err);
+    return c.json({
+      error: 'Failed to delete mapping',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
 app.post('/messages/update-sync-status', async (c: Context) => {
   try {
     const body = await c.req.json();

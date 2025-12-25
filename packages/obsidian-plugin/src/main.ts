@@ -514,6 +514,75 @@ export default class LinePlugin extends Plugin {
       new Notice(`マッピングの登録に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  async resetMapping() {
+    if (!this.settings.lineUserId || !this.settings.vaultId) {
+      new Notice('LINE UserIDとVault IDの両方を設定してください。');
+      return;
+    }
+
+    try {
+      const response = await requestUrl({
+        url: API_ENDPOINTS.DELETE_MAPPING,
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: this.settings.lineUserId,
+          vaultId: this.settings.vaultId,
+        }),
+      });
+
+      if (response.status !== 200) {
+        throw new Error('マッピングのリセットに失敗しました');
+      }
+
+      // Clear local settings
+      this.settings.lineUserId = '';
+      await this.saveSettings();
+
+      new Notice('LINE UserIDとVault IDのマッピングをリセットしました。');
+    } catch (error) {
+      new Notice(`マッピングのリセットに失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+}
+
+class ConfirmResetModal extends Modal {
+  private onConfirm: () => void;
+
+  constructor(app: App, onConfirm: () => void) {
+    super(app);
+    this.onConfirm = onConfirm;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: 'マッピングをリセットしますか？' });
+    contentEl.createEl('p', { text: 'この操作により、LINE UserIDとVault IDの紐づけが削除されます。再度LINEを使用するには、マッピングの再登録が必要になります。' });
+
+    const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
+
+    buttonContainer.createEl('button', { text: 'キャンセル' })
+      .addEventListener('click', () => {
+        this.close();
+      });
+
+    const confirmBtn = buttonContainer.createEl('button', {
+      text: 'リセットする',
+      cls: 'mod-warning'
+    });
+    confirmBtn.addEventListener('click', () => {
+      this.close();
+      this.onConfirm();
+    });
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
 }
 
 class LineSettingTab extends PluginSettingTab {
@@ -754,6 +823,18 @@ class LineSettingTab extends PluginSettingTab {
         .setButtonText('Register')
         .onClick(async () => {
           await this.plugin.registerMapping();
+        }));
+
+    new Setting(containerEl)
+      .setName('Reset mapping')
+      .setDesc('LINE UserIDとVault IDのマッピングをリセットします（KV上の紐づけを削除し、再登録可能にします）')
+      .addButton(button => button
+        .setButtonText('Reset')
+        .setWarning()
+        .onClick(() => {
+          new ConfirmResetModal(this.app, async () => {
+            await this.plugin.resetMapping();
+          }).open();
         }));
   }
 }
