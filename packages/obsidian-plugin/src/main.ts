@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from './constants';
 import { KeyManager } from './crypto/keyManager';
 import { MessageEncryptor } from './crypto/messageEncryptor';
 import { E2EEErrorHandler } from './crypto/errorHandler';
+import { getDateString, getDateWithHyphens, getISOString, getDateTimeForFileName, getTimeOnly, getTimeString } from './dateUtils';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -136,70 +137,15 @@ export default class LinePlugin extends Plugin {
     this.setupAutoSync();
   }
 
-  private toJST(timestamp: number): Date {
-    return new Date(timestamp);
-  }
-
-  private getJSTDateString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const year = jstDate.getFullYear();
-    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
-    const day = String(jstDate.getDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
-  }
-
-  private getJSTDateWithHyphens(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const year = jstDate.getFullYear();
-    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
-    const day = String(jstDate.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  private getJSTISOString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString();
-  }
-
-  private getJSTTimeForFileName(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const year = jstDate.getFullYear();
-    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
-    const day = String(jstDate.getDate()).padStart(2, '0');
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${year}${month}${day}${hour}${minute}${second}`;
-  }
-
-  private getTimeOnly(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}${minute}${second}`;
-  }
-
-  public getJSTTimeString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}:${minute}:${second}`;
-  }
-
   private generateFileName(message: LineMessage): string {
     const template = this.settings.fileNameTemplate;
     const timestamp = message.timestamp;
 
     const variables = {
-      '{date}': this.getJSTDateWithHyphens(timestamp),
-      '{datecompact}': this.getJSTDateString(timestamp),
-      '{time}': this.getTimeOnly(timestamp),
-      '{datetime}': this.getJSTTimeForFileName(timestamp),
+      '{date}': getDateWithHyphens(timestamp),
+      '{datecompact}': getDateString(timestamp),
+      '{time}': getTimeOnly(timestamp),
+      '{datetime}': getDateTimeForFileName(timestamp),
       '{messageId}': message.messageId,
       '{userId}': message.userId,
       '{timestamp}': timestamp.toString()
@@ -261,7 +207,7 @@ export default class LinePlugin extends Plugin {
   }
 
   private parseMessageTemplate(template: string, message: LineMessage, messageText: string): string {
-    return parseMessageTemplate(template, message, messageText, (timestamp) => this.getJSTTimeString(timestamp));
+    return parseMessageTemplate(template, message, messageText, getTimeString);
   }
 
   private async syncMessages(isAutoSync = false) {
@@ -318,7 +264,7 @@ export default class LinePlugin extends Plugin {
           if (message.synced) {
             continue;
           }
-          const dateString = this.getJSTDateString(message.timestamp);
+          const dateString = getDateString(message.timestamp);
           if (!messagesByDate.has(dateString)) {
             messagesByDate.set(dateString, []);
           }
@@ -427,7 +373,7 @@ export default class LinePlugin extends Plugin {
 
           let folderPath: string;
           if (this.settings.organizeByDate) {
-            const dateString = this.getJSTDateString(message.timestamp);
+            const dateString = getDateString(message.timestamp);
             folderPath = `${this.settings.noteFolderPath}/${dateString}`;
           } else {
             folderPath = this.settings.noteFolderPath;
@@ -467,7 +413,7 @@ export default class LinePlugin extends Plugin {
             const content = [
               `---`,
               `source: LINE`,
-              `date: ${this.getJSTISOString(message.timestamp)}`,
+              `date: ${getISOString(message.timestamp)}`,
               `messageId: ${message.messageId}`,
               `userId: ${message.userId}`,
               `---`,
