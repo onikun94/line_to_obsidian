@@ -1,7 +1,7 @@
 {
   "name": "obsidian-line",
   "private": true,
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "LINE integration for Obsidian",
   "workspaces": [
     "packages/*"
