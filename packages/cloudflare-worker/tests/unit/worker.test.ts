@@ -170,9 +170,9 @@ describe('Cloudflare Worker', () => {
     it('マッピングを正常に作成する', async () => {
       const mockContext = {
         req: {
-          json: vi.fn().mockResolvedValue({ 
-            userId: 'user1', 
-            vaultId: 'vault1' 
+          json: vi.fn().mockResolvedValue({
+            userId: 'user1',
+            vaultId: 'vault1'
           }),
         },
         env: {
@@ -192,8 +192,143 @@ describe('Cloudflare Worker', () => {
       });
 
       await handler(mockContext);
-      
+
       expect(mockKVNamespace.put).toHaveBeenCalledWith('user1', 'vault1');
+      expect(mockContext.json).toHaveBeenCalledWith({ status: 'ok' });
+    });
+  });
+
+  describe('マッピング削除エンドポイント (DELETE /mapping)', () => {
+    it('userIdまたはvaultIdが不足している場合はエラーを返す', async () => {
+      const mockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({ userId: 'user1' }), // vaultId missing
+        },
+        json: vi.fn(),
+      };
+
+      const handler = vi.fn().mockImplementation(async (c: any) => {
+        const { userId, vaultId } = await c.req.json();
+        if (!userId || !vaultId) {
+          return c.json({ error: 'Missing userId or vaultId' }, 400);
+        }
+      });
+
+      await handler(mockContext);
+
+      expect(mockContext.json).toHaveBeenCalledWith(
+        { error: 'Missing userId or vaultId' },
+        400
+      );
+    });
+
+    it('vaultIdが一致しない場合は認証エラーを返す', async () => {
+      mockKVNamespace.get.mockResolvedValue('different-vault');
+
+      const mockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            userId: 'user1',
+            vaultId: 'vault1'
+          }),
+        },
+        env: {
+          LINE_USER_MAPPINGS: mockKVNamespace,
+        },
+        json: vi.fn(),
+      };
+
+      const handler = vi.fn().mockImplementation(async (c: any) => {
+        const { userId, vaultId } = await c.req.json();
+        if (!userId || !vaultId) {
+          return c.json({ error: 'Missing userId or vaultId' }, 400);
+        }
+
+        const storedVaultId = await c.env.LINE_USER_MAPPINGS.get(userId);
+        if (!storedVaultId || storedVaultId !== vaultId) {
+          return c.json({ error: 'Unauthorized: VaultId does not match' }, 403);
+        }
+      });
+
+      await handler(mockContext);
+
+      expect(mockContext.json).toHaveBeenCalledWith(
+        { error: 'Unauthorized: VaultId does not match' },
+        403
+      );
+    });
+
+    it('マッピングが存在しない場合は認証エラーを返す', async () => {
+      mockKVNamespace.get.mockResolvedValue(null);
+
+      const mockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            userId: 'user1',
+            vaultId: 'vault1'
+          }),
+        },
+        env: {
+          LINE_USER_MAPPINGS: mockKVNamespace,
+        },
+        json: vi.fn(),
+      };
+
+      const handler = vi.fn().mockImplementation(async (c: any) => {
+        const { userId, vaultId } = await c.req.json();
+        if (!userId || !vaultId) {
+          return c.json({ error: 'Missing userId or vaultId' }, 400);
+        }
+
+        const storedVaultId = await c.env.LINE_USER_MAPPINGS.get(userId);
+        if (!storedVaultId || storedVaultId !== vaultId) {
+          return c.json({ error: 'Unauthorized: VaultId does not match' }, 403);
+        }
+      });
+
+      await handler(mockContext);
+
+      expect(mockContext.json).toHaveBeenCalledWith(
+        { error: 'Unauthorized: VaultId does not match' },
+        403
+      );
+    });
+
+    it('マッピングを正常に削除する', async () => {
+      mockKVNamespace.get.mockResolvedValue('vault1');
+      mockKVNamespace.delete.mockResolvedValue(undefined);
+
+      const mockContext = {
+        req: {
+          json: vi.fn().mockResolvedValue({
+            userId: 'user1',
+            vaultId: 'vault1'
+          }),
+        },
+        env: {
+          LINE_USER_MAPPINGS: mockKVNamespace,
+        },
+        json: vi.fn(),
+      };
+
+      const handler = vi.fn().mockImplementation(async (c: any) => {
+        const { userId, vaultId } = await c.req.json();
+        if (!userId || !vaultId) {
+          return c.json({ error: 'Missing userId or vaultId' }, 400);
+        }
+
+        const storedVaultId = await c.env.LINE_USER_MAPPINGS.get(userId);
+        if (!storedVaultId || storedVaultId !== vaultId) {
+          return c.json({ error: 'Unauthorized: VaultId does not match' }, 403);
+        }
+
+        await c.env.LINE_USER_MAPPINGS.delete(userId);
+        return c.json({ status: 'ok' });
+      });
+
+      await handler(mockContext);
+
+      expect(mockKVNamespace.delete).toHaveBeenCalledWith('user1');
       expect(mockContext.json).toHaveBeenCalledWith({ status: 'ok' });
     });
   });

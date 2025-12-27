@@ -178,6 +178,30 @@ app.post('/mapping', async (c: Context) => {
   }
 });
 
+app.delete('/mapping', async (c: Context) => {
+  try {
+    const { userId, vaultId } = await c.req.json();
+    if (!userId || !vaultId) {
+      return c.json({ error: 'Missing userId or vaultId' }, 400);
+    }
+
+    // Verify that the vaultId matches before deleting
+    const storedVaultId = await getVaultIdForUser(c, userId);
+    if (!storedVaultId || storedVaultId !== vaultId) {
+      return c.json({ error: 'Unauthorized: VaultId does not match' }, 403);
+    }
+
+    await c.env.LINE_USER_MAPPINGS.delete(userId);
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Error in DELETE /mapping:', err);
+    return c.json({
+      error: 'Failed to delete mapping',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
 app.post('/messages/update-sync-status', async (c: Context) => {
   try {
     const body = await c.req.json();
@@ -247,6 +271,24 @@ app.post('/webhook', async (c: Context) => {
         const userId = event.source.userId;
         if (!userId) {
           console.error('Missing userId in event');
+          continue;
+        }
+
+        // Handle /myid command - always show LINE User ID regardless of mapping status
+        if (event.message.text === '/myid' || event.message.text === 'IDを確認') {
+          const client = new line.Client({
+            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+          });
+          const existingVaultId = await getVaultIdForUser(c, userId);
+
+          const replyText = existingVaultId
+            ? `あなたのLINE User ID: ${userId}\n\n現在 Vault と連携中です。\n別のVaultに変更したい場合は、Obsidianプラグインの設定から「Reset Mapping」を実行してください。`
+            : `あなたのLINE User ID: ${userId}\n\nObsidianプラグインの設定画面でこのIDを入力し、「Register Mapping」をクリックしてください。`;
+
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: replyText
+          });
           continue;
         }
 
