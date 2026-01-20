@@ -11,6 +11,11 @@ kv_namespaces = [
   { binding = "LINE_PUBLIC_KEYS", id = "7d09ceac83cd47d28ebab563201208bb" }
 ]
 
+# R2 bucket for image storage
+[[r2_buckets]]
+binding = "LINE_IMAGES"
+bucket_name = "line-images"
+
 # wrangler.toml (wrangler v3.88.0^)
 [observability.logs]
 enabled = true
@@ -26,3 +31,8 @@ kv_namespaces = [
   { binding = "LINE_USER_MAPPINGS", id = "7b0098cda3b145c6bb9675e7e872cc29", preview_id = "7b0098cda3b145c6bb9675e7e872cc29" },
   { binding = "LINE_PUBLIC_KEYS", id = "6e05ea177e1a47abbed6997d6c53bd64", preview_id = "6e05ea177e1a47abbed6997d6c53bd64" }
 ]
+
+[[env.development.r2_buckets]]
+binding = "LINE_IMAGES"
+bucket_name = "line-images-dev"
+preview_bucket_name = "line-images-dev"
