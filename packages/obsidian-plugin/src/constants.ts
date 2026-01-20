@@ -20,4 +20,18 @@ export const API_ENDPOINTS = {
   UPDATE_SYNC_STATUS: `${BASE_URL}/messages/update-sync-status`,
   REGISTER_PUBLIC_KEY: `${BASE_URL}/publickey/register`,
   GET_PUBLIC_KEY: (userId: string): string => `${BASE_URL}/publickey/${userId}`,
+  // Image endpoints
+  IMAGES: (vaultId: string, userId: string): string => {
+    if (!vaultId || !userId) {
+      throw new Error('vaultIdとuserIdは必須パラメータです');
+    }
+    return `${BASE_URL}/images/${vaultId}/${userId}`;
+  },
+  IMAGE_CONTENT: (vaultId: string, userId: string, messageId: string): string => {
+    if (!vaultId || !userId || !messageId) {
+      throw new Error('vaultId、userId、messageIdは必須パラメータです');
+    }
+    return `${BASE_URL}/images/${vaultId}/${userId}/${messageId}/content`;
+  },
+  UPDATE_IMAGE_SYNC_STATUS: `${BASE_URL}/images/update-sync-status`,
 } as const; 
