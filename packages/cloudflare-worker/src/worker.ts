@@ -2,6 +2,17 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors'
 import type { Context } from 'hono';
 import * as line from '@line/bot-sdk';
+import { createCheckoutSession, createPortalSession, verifyWebhookSignature } from './stripe/client';
+import {
+  getSubscription,
+  updateSubscription,
+  canSendImage,
+  incrementImageCount,
+  toSubscriptionResponse,
+  findUserByCustomerId,
+  saveCustomerIndex
+} from './stripe/subscription';
+import type { SubscriptionData, StripeSubscription, StripeInvoice } from './stripe/types';
 
 interface Bindings {
   LINE_CHANNEL_ACCESS_TOKEN: string;
@@ -10,7 +21,13 @@ interface Bindings {
   LINE_USER_MAPPINGS: KVNamespace;
   LINE_PUBLIC_KEYS: KVNamespace;
   LINE_IMAGES: R2Bucket;
+  LINE_SUBSCRIPTIONS: KVNamespace;
   NOTE_FOLDER_PATH: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_PRICE_ID: string;
+  STRIPE_PUBLISHABLE_KEY: string;
+  PAYMENT_PAGE_URL: string;
   [key: string]: string | KVNamespace | R2Bucket;
 }
 
@@ -89,7 +106,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 app.use('*', cors({
-  origin: 'app://obsidian.md',
+  origin: ['app://obsidian.md', 'https://line-notes-sync.pages.dev'],
   allowMethods: ['GET', 'POST', 'DELETE'],
   allowHeaders: ['Content-Type', 'X-Vault-Id'],
   exposeHeaders: ['Content-Length', 'Content-Type'],
@@ -437,6 +454,28 @@ app.post('/webhook', async (c: Context) => {
           continue;
         }
 
+        // ===== Subscription check =====
+        const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
+
+        if (!canSendImage(subscription)) {
+          const client = new line.Client({
+            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+          });
+
+          const limitMessage = subscription.status === 'free'
+            ? `無料の画像送信枠（${subscription.freeLimit}枚）を使い切りました。\n\n引き続き画像を送信するには、プレミアムプラン（月額300円）へのアップグレードが必要です。\n\n▶ プレミアムプランに登録する\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
+            : `サブスクリプションの支払いに問題があります。\n\n▶ 支払い状況を確認する\n${c.env.PAYMENT_PAGE_URL}/portal.html?userId=${userId}`;
+
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: limitMessage
+          });
+
+          console.log(`Image send blocked for user ${userId}: ${subscription.status}, count: ${subscription.imageCount}/${subscription.freeLimit}`);
+          continue;
+        }
+        // ===== End subscription check =====
+
         try {
           // Fetch image from LINE Content API
           const contentResponse = await fetch(
@@ -592,6 +631,25 @@ app.post('/webhook', async (c: Context) => {
             JSON.stringify(imageMessage),
             { expirationTtl: IMAGE_EXPIRATION_TTL }
           );
+
+          // ===== Increment image count and notify if needed =====
+          const newCount = await incrementImageCount(c.env.LINE_SUBSCRIPTIONS, userId);
+
+          // Notify when 3 images remaining (for free users)
+          if (subscription.status === 'free') {
+            const remaining = subscription.freeLimit - newCount;
+            if (remaining === 3) {
+              const client = new line.Client({
+                channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+              });
+              // Use pushMessage to avoid consuming replyToken
+              await client.pushMessage(userId, {
+                type: 'text',
+                text: `無料の画像送信枠が残り3枚になりました。\n\n枠を使い切った後も画像を送信したい場合は、プレミアムプラン（月額300円）をご検討ください。\n\n▶ プレミアムプランを見る\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
+              });
+            }
+          }
+          // ===== End increment and notify =====
         } catch (err) {
           console.error(`Error processing image message ${event.message.id}:`, err);
         }
@@ -803,6 +861,256 @@ app.post('/images/update-sync-status', async (c: Context) => {
     console.error('Error in /images/update-sync-status:', err);
     return c.json({
       error: 'Failed to update sync status',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// ==================== Stripe Payment Endpoints ====================
+
+// Create Stripe Checkout Session
+app.post('/stripe/create-checkout-session', async (c: Context) => {
+  try {
+    const { lineUserId } = await c.req.json();
+
+    if (!lineUserId) {
+      return c.json({ error: 'Missing lineUserId' }, 400);
+    }
+
+    // Validate LINE User ID format (starts with 'U' and has 33 characters)
+    if (typeof lineUserId !== 'string' || !/^U[a-f0-9]{32}$/.test(lineUserId)) {
+      return c.json({ error: 'Invalid lineUserId format' }, 400);
+    }
+
+    // Verify the user has a vault mapping (i.e., has used the service)
+    const vaultId = await getVaultIdForUser(c, lineUserId);
+    if (!vaultId) {
+      return c.json({
+        error: 'Vault not configured. Please set up the Obsidian plugin first.'
+      }, 400);
+    }
+
+    const session = await createCheckoutSession({
+      secretKey: c.env.STRIPE_SECRET_KEY,
+      priceId: c.env.STRIPE_PRICE_ID,
+      lineUserId,
+      successUrl: `${c.env.PAYMENT_PAGE_URL}/success.html`,
+      cancelUrl: `${c.env.PAYMENT_PAGE_URL}/cancel.html`,
+    });
+
+    return c.json({ url: session.url });
+  } catch (err) {
+    console.error('Error creating checkout session:', err);
+    return c.json({
+      error: 'Failed to create checkout session',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Stripe Webhook handler
+app.post('/stripe/webhook', async (c: Context) => {
+  try {
+    const signature = c.req.header('stripe-signature');
+    if (!signature) {
+      return c.json({ error: 'Missing stripe-signature header' }, 401);
+    }
+
+    const body = await c.req.text();
+
+    // Verify webhook signature
+    const event = await verifyWebhookSignature(
+      body,
+      signature,
+      c.env.STRIPE_WEBHOOK_SECRET
+    );
+
+    console.log(`Processing Stripe webhook: ${event.type}`);
+
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const lineUserId = session.metadata?.lineUserId;
+
+        if (!lineUserId) {
+          console.error('CRITICAL: LINE User ID not found in session metadata', {
+            sessionId: session.id,
+            customerId: session.customer,
+          });
+          // Return error to Stripe so they can retry or alert
+          return c.json({ error: 'Missing lineUserId in metadata' }, 400);
+        }
+
+        await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
+          stripeCustomerId: session.customer,
+          subscriptionId: session.subscription,
+          status: 'active',
+        });
+
+        // Save reverse index for efficient customer lookup
+        if (session.customer) {
+          await saveCustomerIndex(c.env.LINE_SUBSCRIPTIONS, session.customer, lineUserId);
+        }
+
+        console.log(`Subscription activated for user: ${lineUserId}`);
+        break;
+      }
+
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as StripeSubscription;
+        const customerId = subscription.customer;
+
+        const lineUserId = await findUserByCustomerId(c.env.LINE_SUBSCRIPTIONS, customerId);
+        if (!lineUserId) {
+          console.error(`No LINE user found for customer: ${customerId} (subscription.updated)`, {
+            subscriptionId: subscription.id,
+            status: subscription.status,
+          });
+          // This is a data inconsistency - the customer exists in Stripe but not in our system
+          // Return 200 to acknowledge receipt but log the error
+          break;
+        }
+
+        // Map Stripe status to our status
+        let status: SubscriptionData['status'] = 'free';
+        if (subscription.status === 'active') {
+          status = 'active';
+        } else if (subscription.status === 'past_due') {
+          status = 'past_due';
+        } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
+          status = 'canceled';
+        }
+
+        await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
+          subscriptionId: subscription.id,
+          status,
+          currentPeriodEnd: subscription.current_period_end * 1000,
+        });
+
+        console.log(`Subscription updated for user: ${lineUserId}, status: ${status}`);
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as StripeSubscription;
+        const customerId = subscription.customer;
+
+        const lineUserId = await findUserByCustomerId(c.env.LINE_SUBSCRIPTIONS, customerId);
+        if (!lineUserId) {
+          console.warn(`No LINE user found for customer: ${customerId} (subscription.deleted)`);
+          break;
+        }
+
+        await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
+          status: 'canceled',
+          subscriptionId: null,
+          currentPeriodEnd: null,
+        });
+
+        console.log(`Subscription canceled for user: ${lineUserId}`);
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as StripeInvoice;
+        const customerId = invoice.customer;
+
+        const lineUserId = await findUserByCustomerId(c.env.LINE_SUBSCRIPTIONS, customerId);
+        if (!lineUserId) {
+          console.warn(`No LINE user found for customer: ${customerId} (invoice.payment_failed)`);
+          break;
+        }
+
+        await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
+          status: 'past_due',
+        });
+
+        console.log(`Payment failed for user: ${lineUserId}`);
+        break;
+      }
+
+      case 'invoice.paid': {
+        const invoice = event.data.object as StripeInvoice;
+        const customerId = invoice.customer;
+
+        const lineUserId = await findUserByCustomerId(c.env.LINE_SUBSCRIPTIONS, customerId);
+        if (!lineUserId) {
+          console.warn(`No LINE user found for customer: ${customerId} (invoice.paid)`);
+          break;
+        }
+
+        const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId);
+        if (subscription.status === 'past_due') {
+          await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
+            status: 'active',
+          });
+          console.log(`Payment recovered for user: ${lineUserId}`);
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    return c.json({ received: true });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    return c.json({
+      error: 'Webhook processing failed',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 400);
+  }
+});
+
+// Create Stripe Customer Portal Session
+app.post('/stripe/create-portal-session', async (c: Context) => {
+  try {
+    const { lineUserId } = await c.req.json();
+
+    if (!lineUserId) {
+      return c.json({ error: 'Missing lineUserId' }, 400);
+    }
+
+    const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId);
+
+    if (!subscription.stripeCustomerId) {
+      return c.json({ error: 'No Stripe customer found. Please subscribe first.' }, 404);
+    }
+
+    const session = await createPortalSession({
+      secretKey: c.env.STRIPE_SECRET_KEY,
+      customerId: subscription.stripeCustomerId,
+      returnUrl: c.env.PAYMENT_PAGE_URL,
+    });
+
+    return c.json({ url: session.url });
+  } catch (err) {
+    console.error('Error creating portal session:', err);
+    return c.json({
+      error: 'Failed to create portal session',
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Get subscription status
+app.get('/subscription/:lineUserId', async (c: Context) => {
+  try {
+    const lineUserId = c.req.param('lineUserId');
+
+    if (!lineUserId) {
+      return c.json({ error: 'Missing lineUserId' }, 400);
+    }
+
+    const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId);
+    const response = toSubscriptionResponse(subscription);
+
+    return c.json(response);
+  } catch (err) {
+    console.error('Error fetching subscription:', err);
+    return c.json({
+      error: 'Failed to fetch subscription',
       message: err instanceof Error ? err.message : 'Unknown error'
     }, 500);
   }
