@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>サブスクリプション管理 - LINE Notes Sync</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 480px;
+      width: 100%;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .logo h1 {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .logo p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    h2 {
+      color: #333;
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+
+    p.description {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .features {
+      background: #f5f5f5;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .features h3 {
+      color: #333;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .features ul {
+      list-style: none;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .features li {
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .features li::before {
+      content: "•";
+      color: #667eea;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .label-hint {
+      font-weight: normal;
+      color: #666;
+      font-size: 12px;
+      display: block;
+      margin-top: 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: bold;
+      color: white;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .error {
+      color: #e53935;
+      margin-top: 12px;
+      padding: 12px;
+      background: #ffebee;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .back-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>LINE Notes Sync</h1>
+      <p>サブスクリプション管理</p>
+    </div>
+
+    <h2>カスタマーポータル</h2>
+    <p class="description">Stripeのカスタマーポータルで以下の操作ができます。</p>
+
+    <div class="features">
+      <h3>管理できる項目</h3>
+      <ul>
+        <li>支払い方法の変更</li>
+        <li>請求履歴の確認</li>
+        <li>サブスクリプションのキャンセル</li>
+        <li>プランの変更（今後対応予定）</li>
+      </ul>
+    </div>
+
+    <div class="form-group">
+      <label>
+        LINE User ID
+        <span class="label-hint">プレミアムプラン購入時に使用したIDを入力してください</span>
+      </label>
+      <input type="text" id="lineUserId" placeholder="例: U1234567890abcdef...">
+    </div>
+
+    <button id="portalButton">管理画面を開く</button>
+
+    <div id="error" class="error" style="display: none;"></div>
+
+    <div class="back-link">
+      <a href="/">トップページに戻る</a>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'https://line-to-obsidian.line-to-obsidian.workers.dev';
+
+    // Get userId from URL params if present
+    const params = new URLSearchParams(window.location.search);
+    const urlUserId = params.get('userId');
+    if (urlUserId) {
+      document.getElementById('lineUserId').value = urlUserId;
+    }
+
+    document.getElementById('portalButton').addEventListener('click', async () => {
+      const lineUserId = document.getElementById('lineUserId').value.trim();
+      const errorDiv = document.getElementById('error');
+      const button = document.getElementById('portalButton');
+
+      errorDiv.style.display = 'none';
+
+      if (!lineUserId) {
+        errorDiv.textContent = 'LINE User IDを入力してください';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = '処理中...';
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/stripe/create-portal-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lineUserId }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'ポータルセッション作成に失敗しました');
+        }
+
+        const { url } = await response.json();
+        window.location.href = url;
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.style.display = 'block';
+        button.disabled = false;
+        button.textContent = '管理画面を開く';
+      }
+    });
+  </script>
+</body>
+</html>
