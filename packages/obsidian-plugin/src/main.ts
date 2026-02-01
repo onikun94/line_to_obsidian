@@ -1,6 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent, TFile, TFolder, ToggleComponent } from 'obsidian';
 import { requestUrl } from 'obsidian';
-import { API_ENDPOINTS } from './constants';
+import { API_ENDPOINTS, PAYMENT_PAGE_URL } from './constants';
 import { KeyManager } from './crypto/keyManager';
 import { MessageEncryptor } from './crypto/messageEncryptor';
 import { E2EEErrorHandler } from './crypto/errorHandler';
@@ -25,6 +25,18 @@ interface LinePluginSettings {
   syncImages: boolean;
   imageFolderPath: string;
   imageFileNameTemplate: string;
+  // Subscription settings (read from API, cached locally)
+  subscriptionStatus?: 'free' | 'active' | 'past_due' | 'canceled';
+  imageCount?: number;
+  freeLimit?: number;
+}
+
+interface SubscriptionResponse {
+  status: 'free' | 'active' | 'past_due' | 'canceled';
+  imageCount: number;
+  freeLimit: number;
+  canSendImage: boolean;
+  remainingFreeImages: number | null;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -44,7 +56,11 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   // Image defaults
   syncImages: true,
   imageFolderPath: 'LINE/images',
-  imageFileNameTemplate: '{date}-{messageId}'
+  imageFileNameTemplate: '{date}-{messageId}',
+  // Subscription defaults
+  subscriptionStatus: 'free',
+  imageCount: 0,
+  freeLimit: 10,
 }
 
 interface LineMessage {
@@ -236,10 +252,49 @@ export default class LinePlugin extends Plugin {
     return parseMessageTemplate(template, message, messageText, getTimeString);
   }
 
+  /**
+   * Fetch subscription status from the server
+   * Returns true if successful, false otherwise
+   */
+  async fetchSubscriptionStatus(): Promise<boolean> {
+    if (!this.settings.lineUserId) {
+      return false;
+    }
+
+    try {
+      const url = API_ENDPOINTS.SUBSCRIPTION(this.settings.lineUserId);
+      const response = await requestUrl({
+        url: url,
+        method: 'GET',
+      });
+
+      if (response.status === 200) {
+        const data = JSON.parse(response.text) as SubscriptionResponse;
+        this.settings.subscriptionStatus = data.status;
+        this.settings.imageCount = data.imageCount;
+        this.settings.freeLimit = data.freeLimit;
+        await this.saveSettings();
+        return true;
+      } else {
+        console.warn(`Subscription status fetch returned status ${response.status}`);
+        return false;
+      }
+    } catch (err) {
+      // Log the error but don't throw - sync should continue
+      console.warn('Failed to fetch subscription status:', err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    }
+  }
+
   private async syncMessages(isAutoSync = false) {
     if (!this.settings.vaultId) {
       new Notice('Vault ID not configured. Please set it in plugin settings.');
       return;
+    }
+
+    // Fetch subscription status at the beginning of sync
+    if (this.settings.lineUserId) {
+      await this.fetchSubscriptionStatus();
     }
 
     const keys = await this.keyManager.loadKeys();
@@ -881,6 +936,24 @@ class LineSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  private getSubscriptionStatusText(): string {
+    const status = this.plugin.settings.subscriptionStatus || 'free';
+    const imageCount = this.plugin.settings.imageCount || 0;
+    const freeLimit = this.plugin.settings.freeLimit || 10;
+
+    switch (status) {
+      case 'active':
+        return 'プレミアムプラン（画像無制限）';
+      case 'past_due':
+        return '支払い遅延中 - 支払い方法を確認してください';
+      case 'canceled':
+        return `キャンセル済み（画像: ${imageCount}/${freeLimit}枚使用済み）`;
+      case 'free':
+      default:
+        return `無料プラン（画像: ${imageCount}/${freeLimit}枚使用済み）`;
+    }
+  }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -1148,6 +1221,63 @@ class LineSettingTab extends PluginSettingTab {
         }));
 
     imageFileNameSetting.settingEl.toggle(this.plugin.settings.syncImages);
+
+    // Premium plan section
+    new Setting(containerEl)
+      .setHeading()
+      .setName('プレミアムプラン');
+
+    // Subscription status display
+    const statusText = this.getSubscriptionStatusText();
+    const statusSetting = new Setting(containerEl)
+      .setName('現在のプラン')
+      .setDesc(statusText);
+
+    // Add upgrade/manage button based on status
+    if (this.plugin.settings.subscriptionStatus === 'active') {
+      statusSetting.addButton(button => button
+        .setButtonText('サブスクリプション管理')
+        .onClick(() => {
+          const userId = this.plugin.settings.lineUserId;
+          const url = userId
+            ? `${PAYMENT_PAGE_URL}/portal.html?userId=${userId}`
+            : `${PAYMENT_PAGE_URL}/portal.html`;
+          window.open(url, '_blank');
+        }));
+    } else {
+      statusSetting.addButton(button => button
+        .setButtonText('プレミアムプランにアップグレード')
+        .setCta()
+        .onClick(() => {
+          const userId = this.plugin.settings.lineUserId;
+          const url = userId
+            ? `${PAYMENT_PAGE_URL}?userId=${userId}`
+            : PAYMENT_PAGE_URL;
+          window.open(url, '_blank');
+        }));
+    }
+
+    // Refresh subscription status button
+    new Setting(containerEl)
+      .setName('サブスクリプション状態を更新')
+      .setDesc('サーバーから最新のサブスクリプション状態を取得します')
+      .addButton(button => button
+        .setButtonText('更新')
+        .onClick(async () => {
+          button.setDisabled(true);
+          button.setButtonText('更新中...');
+          try {
+            await this.plugin.fetchSubscriptionStatus();
+            new Notice('サブスクリプション状態を更新しました');
+            // Refresh the settings display
+            this.display();
+          } catch (err) {
+            new Notice('サブスクリプション状態の取得に失敗しました');
+          } finally {
+            button.setDisabled(false);
+            button.setButtonText('更新');
+          }
+        }));
 
     // Connection settings section
     new Setting(containerEl)

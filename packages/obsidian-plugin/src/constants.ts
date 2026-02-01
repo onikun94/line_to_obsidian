@@ -34,4 +34,14 @@ export const API_ENDPOINTS = {
     return `${BASE_URL}/images/${vaultId}/${userId}/${messageId}/content`;
   },
   UPDATE_IMAGE_SYNC_STATUS: `${BASE_URL}/images/update-sync-status`,
-} as const; 
+  // Subscription endpoints
+  SUBSCRIPTION: (lineUserId: string): string => {
+    if (!lineUserId) {
+      throw new Error('lineUserIdは必須パラメータです');
+    }
+    return `${BASE_URL}/subscription/${lineUserId}`;
+  },
+} as const;
+
+// Payment page URL (should match wrangler.toml PAYMENT_PAGE_URL)
+export const PAYMENT_PAGE_URL = process.env.PAYMENT_PAGE_URL || 'https://line-to-obsidian-payment.pages.dev'; 
