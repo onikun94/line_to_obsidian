@@ -12,81 +12,125 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: #f8f9fa;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+      line-height: 1.6;
+      color: #333;
     }
 
-    .container {
-      background: white;
-      padding: 40px;
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 480px;
-      width: 100%;
+    header {
+      background: #fff;
+      border-bottom: 1px solid #eee;
+      padding: 16px 0;
+    }
+
+    header .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: #06c755;
+      text-decoration: none;
+    }
+
+    nav a {
+      color: #666;
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      color: #333;
+    }
+
+    @media (max-width: 600px) {
+      header .container {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      nav a {
+        margin: 0 12px;
+      }
+    }
+
+    main {
+      padding: 40px 20px;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .page-title {
       text-align: center;
       margin-bottom: 24px;
     }
 
-    .logo h1 {
+    .page-title h1 {
       font-size: 24px;
       color: #333;
       margin-bottom: 4px;
     }
 
-    .logo p {
+    .page-title p {
       color: #666;
       font-size: 14px;
     }
 
-    h2 {
-      color: #333;
-      font-size: 20px;
-      margin-bottom: 16px;
-    }
-
-    p.description {
-      color: #666;
-      line-height: 1.6;
+    .portal-card {
+      background: #06c755;
+      border-radius: 12px;
+      padding: 24px;
       margin-bottom: 24px;
+      color: white;
     }
 
-    .features {
-      background: #f5f5f5;
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-    }
-
-    .features h3 {
-      color: #333;
-      font-size: 14px;
+    .portal-card h2 {
+      font-size: 18px;
       margin-bottom: 12px;
     }
 
-    .features ul {
+    .portal-features {
       list-style: none;
-      color: #666;
+      margin: 0;
+    }
+
+    .portal-features li {
+      padding: 6px 0 6px 28px;
       font-size: 14px;
+      position: relative;
     }
 
-    .features li {
-      padding: 6px 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .portal-features li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
     }
 
-    .features li::before {
-      content: "•";
-      color: #667eea;
+    .portal-features li::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-60%) rotate(45deg);
+      width: 5px;
+      height: 9px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
     }
 
     .form-group {
@@ -98,11 +142,12 @@
       margin-bottom: 8px;
       font-weight: 600;
       color: #333;
+      font-size: 14px;
     }
 
     .label-hint {
       font-weight: normal;
-      color: #666;
+      color: #888;
       font-size: 12px;
       display: block;
       margin-top: 4px;
@@ -110,45 +155,42 @@
 
     input {
       width: 100%;
-      padding: 14px 16px;
+      padding: 12px 14px;
       font-size: 16px;
-      border: 2px solid #e0e0e0;
+      border: 1px solid #ddd;
       border-radius: 8px;
       transition: border-color 0.2s;
     }
 
     input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #06c755;
     }
 
     button {
       width: 100%;
-      padding: 16px;
+      padding: 14px;
       font-size: 16px;
-      font-weight: bold;
+      font-weight: 600;
       color: white;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #06c755;
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: background 0.2s;
     }
 
     button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      background: #05b34c;
     }
 
     button:disabled {
       background: #ccc;
       cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
     }
 
     .error {
-      color: #e53935;
+      color: #d32f2f;
       margin-top: 12px;
       padding: 12px;
       background: #ffebee;
@@ -159,10 +201,12 @@
     .back-link {
       text-align: center;
       margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
     }
 
     .back-link a {
-      color: #667eea;
+      color: #06c755;
       text-decoration: none;
       font-size: 14px;
     }
@@ -173,22 +217,30 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="logo">
-      <h1>LINE Notes Sync</h1>
-      <p>サブスクリプション管理</p>
+  <header>
+    <div class="container">
+      <a href="/" class="logo">LINE Notes Sync</a>
+      <nav>
+        <a href="/#features">機能</a>
+        <a href="/#pricing">料金</a>
+        <a href="/#faq">FAQ</a>
+        <a href="tokushoho.html">特定商取引法</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-title">
+      <h1>サブスクリプション管理</h1>
+      <p>Stripeカスタマーポータルで管理できます</p>
     </div>
 
-    <h2>カスタマーポータル</h2>
-    <p class="description">Stripeのカスタマーポータルで以下の操作ができます。</p>
-
-    <div class="features">
-      <h3>管理できる項目</h3>
-      <ul>
+    <div class="portal-card">
+      <h2>管理できる項目</h2>
+      <ul class="portal-features">
         <li>支払い方法の変更</li>
         <li>請求履歴の確認</li>
         <li>サブスクリプションのキャンセル</li>
-        <li>プランの変更（今後対応予定）</li>
       </ul>
     </div>
 
@@ -207,7 +259,7 @@
     <div class="back-link">
       <a href="/">トップページに戻る</a>
     </div>
-  </div>
+  </main>
 
   <script>
     const API_BASE_URL = 'https://line-to-obsidian.line-to-obsidian.workers.dev';
