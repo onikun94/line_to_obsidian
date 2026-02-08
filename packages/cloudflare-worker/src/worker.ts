@@ -333,6 +333,30 @@ app.post('/webhook', async (c: Context) => {
           continue;
         }
 
+        // Handle /status command - show subscription plan and image usage
+        if (event.message.text === '/status') {
+          const client = new line.Client({
+            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
+          });
+          const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
+
+          let statusText: string;
+          if (subscription.status === 'active') {
+            statusText = `現在のプラン: プレミアム\n画像送信: 無制限\n\nサブスクリプションの管理はこちら:\n${c.env.PAYMENT_PAGE_URL}/portal.html?userId=${userId}`;
+          } else if (subscription.status === 'past_due') {
+            statusText = `現在のプラン: プレミアム（支払い遅延中）\n\n支払い状況を確認してください:\n${c.env.PAYMENT_PAGE_URL}/portal.html?userId=${userId}`;
+          } else {
+            const remaining = Math.max(0, subscription.freeLimit - subscription.imageCount);
+            statusText = `現在のプラン: 無料\n画像送信: 残り${remaining}枚 / ${subscription.freeLimit}枚\n\nプレミアムプラン（月額300円）で画像送信が無制限に:\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`;
+          }
+
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: statusText
+          });
+          continue;
+        }
+
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId}`);
