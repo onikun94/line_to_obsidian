@@ -44,4 +44,4 @@ export const API_ENDPOINTS = {
 } as const;
 
 // Payment page URL (should match wrangler.toml PAYMENT_PAGE_URL)
-export const PAYMENT_PAGE_URL = process.env.PAYMENT_PAGE_URL || 'https://line-to-obsidian-payment.pages.dev'; 
+export const PAYMENT_PAGE_URL = process.env.PAYMENT_PAGE_URL || 'https://line-notes-sync.pages.dev';
