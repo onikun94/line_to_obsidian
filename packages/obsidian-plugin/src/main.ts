@@ -1,6 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent, TFile, TFolder, ToggleComponent } from 'obsidian';
 import { requestUrl } from 'obsidian';
-import { API_ENDPOINTS } from './constants';
+import { API_ENDPOINTS, PAYMENT_PAGE_URL } from './constants';
 import { KeyManager } from './crypto/keyManager';
 import { MessageEncryptor } from './crypto/messageEncryptor';
 import { E2EEErrorHandler } from './crypto/errorHandler';
@@ -21,6 +21,22 @@ interface LinePluginSettings {
   groupedFrontmatterTemplate: string;
   groupedFileNameTemplate: string;
   apiUrl?: string;
+  // Image settings
+  syncImages: boolean;
+  imageFolderPath: string;
+  imageFileNameTemplate: string;
+  // Subscription settings (read from API, cached locally)
+  subscriptionStatus?: 'free' | 'active' | 'past_due' | 'canceled';
+  imageCount?: number;
+  freeLimit?: number;
+}
+
+interface SubscriptionResponse {
+  status: 'free' | 'active' | 'past_due' | 'canceled';
+  imageCount: number;
+  freeLimit: number;
+  canSendImage: boolean;
+  remainingFreeImages: number | null;
 }
 
 const DEFAULT_SETTINGS: LinePluginSettings = {
@@ -36,7 +52,15 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   groupMessagesByDate: false,
   groupedMessageTemplate: '{time}: {text}',
   groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
-  groupedFileNameTemplate: '{date}'
+  groupedFileNameTemplate: '{date}',
+  // Image defaults
+  syncImages: true,
+  imageFolderPath: 'LINE/images',
+  imageFileNameTemplate: '{date}-{messageId}',
+  // Subscription defaults
+  subscriptionStatus: 'free',
+  imageCount: 0,
+  freeLimit: 10,
 }
 
 interface LineMessage {
@@ -53,6 +77,24 @@ interface LineMessage {
   senderKeyId?: string;
   recipientUserId?: string;
   version?: string;
+}
+
+interface ImageMessage {
+  timestamp: number;
+  messageId: string;
+  userId: string;
+  vaultId: string;
+  synced: boolean;
+  type: 'image';
+  contentType: string;
+  fileSize: number;
+  encrypted: boolean;
+  encryptedAESKey?: string;
+  iv?: string;
+  senderKeyId?: string;
+  recipientUserId?: string;
+  version?: string;
+  r2Key: string;
 }
 
 // Helper function for template parsing
@@ -210,10 +252,49 @@ export default class LinePlugin extends Plugin {
     return parseMessageTemplate(template, message, messageText, getTimeString);
   }
 
+  /**
+   * Fetch subscription status from the server
+   * Returns true if successful, false otherwise
+   */
+  async fetchSubscriptionStatus(): Promise<boolean> {
+    if (!this.settings.lineUserId) {
+      return false;
+    }
+
+    try {
+      const url = API_ENDPOINTS.SUBSCRIPTION(this.settings.lineUserId);
+      const response = await requestUrl({
+        url: url,
+        method: 'GET',
+      });
+
+      if (response.status === 200) {
+        const data = JSON.parse(response.text) as SubscriptionResponse;
+        this.settings.subscriptionStatus = data.status;
+        this.settings.imageCount = data.imageCount;
+        this.settings.freeLimit = data.freeLimit;
+        await this.saveSettings();
+        return true;
+      } else {
+        console.warn(`Subscription status fetch returned status ${response.status}`);
+        return false;
+      }
+    } catch (err) {
+      // Log the error but don't throw - sync should continue
+      console.warn('Failed to fetch subscription status:', err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    }
+  }
+
   private async syncMessages(isAutoSync = false) {
     if (!this.settings.vaultId) {
       new Notice('Vault ID not configured. Please set it in plugin settings.');
       return;
+    }
+
+    // Fetch subscription status at the beginning of sync
+    if (this.settings.lineUserId) {
+      await this.fetchSubscriptionStatus();
     }
 
     const keys = await this.keyManager.loadKeys();
@@ -436,11 +517,273 @@ export default class LinePlugin extends Plugin {
         await this.updateSyncStatus(syncedMessageIds);
       }
 
-      if (newMessageCount > 0 || !isAutoSync) {
-        new Notice(`LINE messages synced successfully. ${newMessageCount} new messages.`);
+      // Sync images if enabled
+      let newImageCount = 0;
+      if (this.settings.syncImages) {
+        newImageCount = await this.syncImages();
+      }
+
+      if (newMessageCount > 0 || newImageCount > 0 || !isAutoSync) {
+        const parts = [];
+        if (newMessageCount > 0) parts.push(`${newMessageCount} new messages`);
+        if (newImageCount > 0) parts.push(`${newImageCount} new images`);
+        const summary = parts.length > 0 ? parts.join(', ') : 'No new content';
+        new Notice(`LINE sync completed. ${summary}.`);
       }
     } catch (err) {
       new Notice(`Failed to sync LINE messages: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  private async syncImages(): Promise<number> {
+    try {
+      const url = API_ENDPOINTS.IMAGES(this.settings.vaultId, this.settings.lineUserId);
+      const response = await requestUrl({
+        url: url,
+        method: 'GET',
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to fetch images: ${response.status}`);
+      }
+
+      const images: ImageMessage[] = JSON.parse(response.text);
+      let newImageCount = 0;
+      const syncedImageIds: string[] = [];
+
+      for (const image of images) {
+        if (image.synced) {
+          continue;
+        }
+
+        try {
+          // Fetch image content
+          const contentUrl = API_ENDPOINTS.IMAGE_CONTENT(
+            this.settings.vaultId,
+            this.settings.lineUserId,
+            image.messageId
+          );
+          const contentResponse = await requestUrl({
+            url: contentUrl,
+            method: 'GET',
+          });
+
+          if (contentResponse.status !== 200) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Failed to fetch image content: ${contentResponse.status}`);
+            }
+            continue;
+          }
+
+          // Decrypt image if encrypted
+          let imageData: ArrayBuffer;
+          if (image.encrypted) {
+            imageData = await this.messageEncryptor.decryptImageData(
+              contentResponse.arrayBuffer,
+              {
+                encrypted: image.encrypted,
+                encryptedAESKey: image.encryptedAESKey,
+                iv: image.iv,
+                senderKeyId: image.senderKeyId,
+                recipientUserId: image.recipientUserId,
+                version: image.version
+              }
+            );
+          } else {
+            imageData = contentResponse.arrayBuffer;
+          }
+
+          // Ensure image folder exists
+          const normalizedImageFolderPath = normalizePath(this.settings.imageFolderPath);
+          const imageFolder = this.app.vault.getAbstractFileByPath(normalizedImageFolderPath);
+          if (!imageFolder) {
+            await this.app.vault.createFolder(normalizedImageFolderPath);
+          }
+
+          // Generate image file name
+          const extension = this.getExtensionFromContentType(image.contentType);
+          const imageFileName = this.generateImageFileName(image, extension);
+          const imageFilePath = normalizePath(`${this.settings.imageFolderPath}/${imageFileName}`);
+
+          // Save image file
+          await this.app.vault.createBinary(imageFilePath, imageData);
+
+          // Create note for the image
+          await this.createImageNote(image, imageFileName);
+
+          newImageCount++;
+          syncedImageIds.push(image.messageId);
+        } catch (err) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`Error processing image ${image.messageId}:`, err);
+          }
+        }
+      }
+
+      if (syncedImageIds.length > 0) {
+        await this.updateImageSyncStatus(syncedImageIds);
+      }
+
+      return newImageCount;
+    } catch (err) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error syncing images:', err);
+      }
+      return 0;
+    }
+  }
+
+  private getExtensionFromContentType(contentType: string): string {
+    const mimeToExt: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/heic': 'heic',
+      'image/heif': 'heif',
+      'image/bmp': 'bmp',
+      'image/tiff': 'tiff',
+    };
+    return mimeToExt[contentType] || 'jpg';
+  }
+
+  private generateImageFileName(image: ImageMessage, extension: string): string {
+    const template = this.settings.imageFileNameTemplate;
+    const timestamp = image.timestamp;
+
+    const variables: Record<string, string> = {
+      '{date}': getDateWithHyphens(timestamp),
+      '{datecompact}': getDateString(timestamp),
+      '{time}': getTimeOnly(timestamp),
+      '{datetime}': getDateTimeForFileName(timestamp),
+      '{messageId}': image.messageId,
+      '{userId}': image.userId,
+      '{timestamp}': timestamp.toString()
+    };
+
+    let fileName = template;
+    for (const [variable, value] of Object.entries(variables)) {
+      fileName = fileName.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value);
+    }
+
+    return `${fileName}.${extension}`;
+  }
+
+  private async createImageNote(image: ImageMessage, imageFileName: string) {
+    // Determine note folder path
+    let noteFolderPath: string;
+    if (this.settings.organizeByDate) {
+      const dateString = getDateString(image.timestamp);
+      noteFolderPath = `${this.settings.noteFolderPath}/${dateString}`;
+    } else {
+      noteFolderPath = this.settings.noteFolderPath;
+    }
+
+    // Ensure note folder exists
+    const normalizedNoteFolderPath = normalizePath(noteFolderPath);
+    const noteFolder = this.app.vault.getAbstractFileByPath(normalizedNoteFolderPath);
+    if (!noteFolder) {
+      // Create parent folder first if needed
+      const normalizedBaseFolderPath = normalizePath(this.settings.noteFolderPath);
+      const baseFolder = this.app.vault.getAbstractFileByPath(normalizedBaseFolderPath);
+      if (!baseFolder) {
+        await this.app.vault.createFolder(normalizedBaseFolderPath);
+      }
+      await this.app.vault.createFolder(normalizedNoteFolderPath);
+    }
+
+    // Calculate relative path from note to image
+    const imageFullPath = `${this.settings.imageFolderPath}/${imageFileName}`;
+
+    if (this.settings.groupMessagesByDate) {
+      // Append to grouped file
+      const dateString = getDateString(image.timestamp);
+      const fileNameWithoutExt = parseFrontmatterTemplate(this.settings.groupedFileNameTemplate, dateString);
+      const fileName = `${fileNameWithoutExt}.md`;
+      const filePath = `${noteFolderPath}/${fileName}`;
+      const normalizedFilePath = normalizePath(filePath);
+
+      const imageEmbed = `![[${imageFullPath}]]`;
+      const timeString = getTimeString(image.timestamp);
+      const messageContent = `${timeString}: ${imageEmbed}`;
+
+      // Check if file exists
+      let existingContent = '';
+      const existingFile = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+      if (existingFile instanceof TFile) {
+        existingContent = await this.app.vault.read(existingFile);
+      }
+
+      let finalContent: string;
+      if (existingContent) {
+        finalContent = existingContent.trimEnd() + '\n' + messageContent;
+      } else {
+        const parsedFrontmatter = parseFrontmatterTemplate(this.settings.groupedFrontmatterTemplate, dateString);
+        const frontmatter = [
+          `---`,
+          parsedFrontmatter,
+          `---`,
+          ``,
+          ''
+        ].join('\n');
+        finalContent = frontmatter + messageContent;
+      }
+
+      const fileToWrite = this.app.vault.getAbstractFileByPath(normalizedFilePath);
+      if (fileToWrite instanceof TFile) {
+        await this.app.vault.modify(fileToWrite, finalContent);
+      } else {
+        await this.app.vault.create(normalizedFilePath, finalContent);
+      }
+    } else {
+      // Create individual note for image
+      const noteFileName = this.generateImageFileName(image, 'md').replace(/\.md\.md$/, '.md');
+      const notePath = normalizePath(`${noteFolderPath}/${noteFileName}`);
+
+      const content = [
+        `---`,
+        `source: LINE`,
+        `date: ${getISOString(image.timestamp)}`,
+        `messageId: ${image.messageId}`,
+        `userId: ${image.userId}`,
+        `type: image`,
+        `---`,
+        ``,
+        `![[${imageFullPath}]]`
+      ].join('\n');
+
+      await this.app.vault.create(notePath, content);
+    }
+  }
+
+  private async updateImageSyncStatus(messageIds: string[]) {
+    try {
+      if (!this.settings.lineUserId) {
+        return;
+      }
+
+      const response = await requestUrl({
+        url: API_ENDPOINTS.UPDATE_IMAGE_SYNC_STATUS,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vaultId: this.settings.vaultId,
+          messageIds: messageIds,
+          userId: this.settings.lineUserId,
+        }),
+      });
+
+      if (response.status !== 200) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`Failed to update image sync status: ${response.status}`);
+        }
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`Error updating image sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
   }
 
@@ -591,6 +934,24 @@ class LineSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: LinePlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  private getSubscriptionStatusText(): string {
+    const status = this.plugin.settings.subscriptionStatus || 'free';
+    const imageCount = this.plugin.settings.imageCount || 0;
+    const freeLimit = this.plugin.settings.freeLimit || 10;
+
+    switch (status) {
+      case 'active':
+        return 'プレミアムプラン（画像無制限）';
+      case 'past_due':
+        return '支払い遅延中 - 支払い方法を確認してください';
+      case 'canceled':
+        return `キャンセル済み（画像: ${imageCount}/${freeLimit}枚使用済み）`;
+      case 'free':
+      default:
+        return `無料プラン（画像: ${imageCount}/${freeLimit}枚使用済み）`;
+    }
   }
 
   display(): void {
@@ -815,6 +1176,113 @@ class LineSettingTab extends PluginSettingTab {
       ul.createEl('li', { text: '{userId}: ユーザーID' });
       ul.createEl('li', { text: '{timestamp}: Unixタイムスタンプ' });
     });
+
+    // Image settings section
+    new Setting(containerEl)
+      .setHeading()
+      .setName('画像設定');
+
+    new Setting(containerEl)
+      .setName('Sync images')
+      .setDesc('LINEで送信した画像を同期するかどうか')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.syncImages)
+        .onChange(async (value) => {
+          this.plugin.settings.syncImages = value;
+          await this.plugin.saveSettings();
+
+          // Show/hide image-related settings
+          imageFolderSetting.settingEl.toggle(value);
+          imageFileNameSetting.settingEl.toggle(value);
+        }));
+
+    const imageFolderSetting = new Setting(containerEl)
+      .setName('Image folder path')
+      .setDesc('画像ファイルの保存先フォルダ')
+      .addText(text => text
+        .setPlaceholder('LINE/images')
+        .setValue(this.plugin.settings.imageFolderPath)
+        .onChange(async (value) => {
+          this.plugin.settings.imageFolderPath = value || 'LINE/images';
+          await this.plugin.saveSettings();
+        }));
+
+    imageFolderSetting.settingEl.toggle(this.plugin.settings.syncImages);
+
+    const imageFileNameSetting = new Setting(containerEl)
+      .setName('Image file name template')
+      .setDesc('画像ファイルの命名テンプレート（拡張子は自動で付与されます）\n利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}')
+      .addText(text => text
+        .setPlaceholder('{date}-{messageId}')
+        .setValue(this.plugin.settings.imageFileNameTemplate)
+        .onChange(async (value) => {
+          this.plugin.settings.imageFileNameTemplate = value || '{date}-{messageId}';
+          await this.plugin.saveSettings();
+        }));
+
+    imageFileNameSetting.settingEl.toggle(this.plugin.settings.syncImages);
+
+    // Premium plan section
+    new Setting(containerEl)
+      .setHeading()
+      .setName('プレミアムプラン');
+
+    // Subscription status display
+    const statusText = this.getSubscriptionStatusText();
+    const statusSetting = new Setting(containerEl)
+      .setName('現在のプラン')
+      .setDesc(statusText);
+
+    // Add upgrade/manage button based on status
+    if (this.plugin.settings.subscriptionStatus === 'active') {
+      statusSetting.addButton(button => button
+        .setButtonText('サブスクリプション管理')
+        .onClick(() => {
+          const userId = this.plugin.settings.lineUserId;
+          const url = userId
+            ? `${PAYMENT_PAGE_URL}/portal.html?userId=${userId}`
+            : `${PAYMENT_PAGE_URL}/portal.html`;
+          window.open(url, '_blank');
+        }));
+    } else {
+      statusSetting.addButton(button => button
+        .setButtonText('プレミアムプランにアップグレード')
+        .setCta()
+        .onClick(() => {
+          const userId = this.plugin.settings.lineUserId;
+          const url = userId
+            ? `${PAYMENT_PAGE_URL}?userId=${userId}`
+            : PAYMENT_PAGE_URL;
+          window.open(url, '_blank');
+        }));
+    }
+
+    // Refresh subscription status button
+    new Setting(containerEl)
+      .setName('サブスクリプション状態を更新')
+      .setDesc('サーバーから最新のサブスクリプション状態を取得します')
+      .addButton(button => button
+        .setButtonText('更新')
+        .onClick(async () => {
+          button.setDisabled(true);
+          button.setButtonText('更新中...');
+          try {
+            await this.plugin.fetchSubscriptionStatus();
+            new Notice('サブスクリプション状態を更新しました');
+            // Refresh the settings display
+            this.display();
+          } catch (err) {
+            new Notice('サブスクリプション状態の取得に失敗しました');
+          } finally {
+            button.setDisabled(false);
+            button.setButtonText('更新');
+          }
+        }));
+
+    // Connection settings section
+    new Setting(containerEl)
+      .setHeading()
+      .setName('接続設定');
 
     new Setting(containerEl)
       .setName('Register mapping')

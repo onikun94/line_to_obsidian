@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>キャンセル - LINE Notes Sync</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      padding: 48px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .cancel-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      color: white;
+      font-size: 40px;
+    }
+
+    h1 {
+      color: #333;
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+
+    p {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .info-box {
+      background: #fff3e0;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 24px 0;
+    }
+
+    .info-box p {
+      color: #e65100;
+      margin: 0;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+
+    a.button {
+      display: inline-block;
+      padding: 14px 24px;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    a.button.primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    a.button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    a.button.secondary {
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    a.button.secondary:hover {
+      background: #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="cancel-icon">!</div>
+    <h1>購入がキャンセルされました</h1>
+    <p>プレミアムプランの購入手続きが中断されました。</p>
+
+    <div class="info-box">
+      <p>無料プランでは画像を累計10枚まで送信できます。<br>テキストメッセージは引き続き無制限でご利用いただけます。</p>
+    </div>
+
+    <p>ご不明な点がございましたら、お気軽にお問い合わせください。</p>
+
+    <div class="buttons">
+      <a href="/" class="button primary">もう一度試す</a>
+      <a href="https://github.com/your-repo/issues" class="button secondary">お問い合わせ</a>
+    </div>
+  </div>
+</body>
+</html>

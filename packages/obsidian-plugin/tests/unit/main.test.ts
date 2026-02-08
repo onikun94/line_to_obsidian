@@ -59,7 +59,13 @@ describe('LinePlugin', () => {
         groupMessagesByDate: false,
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
-        groupedMessageTemplate: '{time}: {text}'
+        groupedMessageTemplate: '{time}: {text}',
+        syncImages: true,
+        imageFolderPath: 'LINE/images',
+        imageFileNameTemplate: '{date}-{messageId}',
+        subscriptionStatus: 'free',
+        imageCount: 0,
+        freeLimit: 10
       });
     });
 
@@ -84,7 +90,13 @@ describe('LinePlugin', () => {
         groupMessagesByDate: false,
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
-        groupedMessageTemplate: '{time}: {text}'
+        groupedMessageTemplate: '{time}: {text}',
+        syncImages: true,
+        imageFolderPath: 'LINE/images',
+        imageFileNameTemplate: '{date}-{messageId}',
+        subscriptionStatus: 'free',
+        imageCount: 0,
+        freeLimit: 10
       });
     });
   });

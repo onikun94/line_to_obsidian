@@ -11,6 +11,15 @@ export interface EncryptedMessage {
   version: string;
 }
 
+export interface EncryptedImageMetadata {
+  encrypted: boolean;
+  encryptedAESKey?: string;
+  iv?: string;
+  senderKeyId?: string;
+  recipientUserId?: string;
+  version?: string;
+}
+
 export class MessageEncryptor {
   private keyManager: KeyManager;
   private readonly VERSION = '1.0';
@@ -167,18 +176,18 @@ export class MessageEncryptor {
    * Internal method for message encryption
    */
   private async encryptMessageWithKey(
-    message: string, 
-    recipientPublicKey: CryptoKey, 
+    message: string,
+    recipientPublicKey: CryptoKey,
     recipientUserId: string
   ): Promise<EncryptedMessage> {
     const aesKey = await CryptoUtils.generateAESKey();
     const { encrypted, iv } = await CryptoUtils.encryptMessage(message, aesKey);
     const encryptedAESKey = await CryptoUtils.encryptAESKey(aesKey, recipientPublicKey);
-    
+
     const keyPair = this.keyManager.getKeyPair();
     const publicKeyPem = await CryptoUtils.exportPublicKey(keyPair.publicKey);
     const senderKeyId = await this.generateKeyId(publicKeyPem);
-    
+
     return {
       encryptedContent: CryptoUtils.arrayBufferToBase64(encrypted),
       encryptedAESKey: CryptoUtils.arrayBufferToBase64(encryptedAESKey),
@@ -188,5 +197,42 @@ export class MessageEncryptor {
       timestamp: Date.now(),
       version: this.VERSION
     };
+  }
+
+  /**
+   * Decrypts encrypted image data
+   */
+  async decryptImageData(encryptedData: ArrayBuffer, metadata: EncryptedImageMetadata): Promise<ArrayBuffer> {
+    if (!metadata.encrypted) {
+      return encryptedData;
+    }
+
+    if (!metadata.encryptedAESKey || !metadata.iv) {
+      throw new Error('Missing encryption metadata for image');
+    }
+
+    try {
+      const keyPair = this.keyManager.getKeyPair();
+
+      const encryptedAESKey = CryptoUtils.base64ToArrayBuffer(metadata.encryptedAESKey);
+      const iv = new Uint8Array(CryptoUtils.base64ToArrayBuffer(metadata.iv));
+
+      // Decrypt the AES key using private key
+      const aesKey = await CryptoUtils.decryptAESKey(encryptedAESKey, keyPair.privateKey);
+
+      // Decrypt the image data using AES key
+      const decryptedData = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        aesKey,
+        encryptedData
+      );
+
+      return decryptedData;
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Image decryption failed:', error);
+      }
+      throw new Error('Failed to decrypt image');
+    }
   }
 }

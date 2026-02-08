@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>プライバシーポリシー - LINE Notes Sync</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      line-height: 1.8;
+      color: #333;
+      background: #fafafa;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #eee;
+      padding: 16px 0;
+    }
+
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: #06c755;
+      text-decoration: none;
+    }
+
+    nav a {
+      color: #666;
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      color: #333;
+    }
+
+    main {
+      background: #fff;
+      padding: 48px 0;
+      min-height: calc(100vh - 200px);
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #06c755;
+    }
+
+    h2 {
+      font-size: 20px;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      color: #222;
+    }
+
+    p {
+      margin-bottom: 16px;
+      color: #555;
+    }
+
+    ul {
+      margin: 16px 0;
+      padding-left: 24px;
+      color: #555;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .update-date {
+      color: #999;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    footer {
+      background: #333;
+      color: #fff;
+      padding: 24px 0;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    footer a {
+      color: #ccc;
+      text-decoration: none;
+      margin: 0 12px;
+    }
+
+    @media (max-width: 600px) {
+      header .container {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      nav a {
+        margin: 0 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo">LINE Notes Sync</a>
+      <nav>
+        <a href="/">ホーム</a>
+        <a href="tokushoho.html">特定商取引法</a>
+        <a href="terms.html">利用規約</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <h1>プライバシーポリシー</h1>
+      <p class="update-date">最終更新日: 2026年1月31日</p>
+
+      <p>LINE Notes Sync（以下「本サービス」）は、お客様のプライバシーを尊重し、個人情報の保護に努めています。本プライバシーポリシーは、本サービスにおける個人情報の取り扱いについて説明します。</p>
+
+      <h2>1. 収集する情報</h2>
+      <p>本サービスでは、以下の情報を収集します。</p>
+      <ul>
+        <li><strong>LINE User ID</strong>: LINEアカウントとの連携に使用します</li>
+        <li><strong>メッセージ内容</strong>: LINEで送信されたテキストおよび画像（エンドツーエンド暗号化されます）</li>
+        <li><strong>決済情報</strong>: プレミアムプラン購入時にStripeを通じて処理されます（クレジットカード情報は本サービスでは保存しません）</li>
+        <li><strong>利用状況</strong>: 画像送信枚数、サブスクリプション状態等のサービス利用に関する情報</li>
+      </ul>
+
+      <h2>2. 情報の利用目的</h2>
+      <p>収集した情報は、以下の目的で利用します。</p>
+      <ul>
+        <li>本サービスの提供・運営</li>
+        <li>お客様のObsidian Vaultへのメッセージ同期</li>
+        <li>サブスクリプションの管理・課金処理</li>
+        <li>サービスの改善・新機能の開発</li>
+        <li>お問い合わせへの対応</li>
+        <li>重要なお知らせの通知</li>
+      </ul>
+
+      <h2>3. エンドツーエンド暗号化</h2>
+      <p>本サービスでは、お客様のメッセージを保護するためにエンドツーエンド暗号化を採用しています。</p>
+      <ul>
+        <li>メッセージは、お客様のObsidian Vaultに設定された公開鍵で暗号化されます</li>
+        <li>暗号化されたメッセージは、お客様のVault内の秘密鍵でのみ復号できます</li>
+        <li>サーバー管理者を含む第三者は、メッセージの内容を閲覧できません</li>
+      </ul>
+
+      <h2>4. 情報の保存</h2>
+      <ul>
+        <li>メッセージデータ: 同期後10日間サーバーに保存され、その後自動的に削除されます</li>
+        <li>画像データ: 同期後7日間サーバーに保存され、その後自動的に削除されます</li>
+        <li>アカウント情報: サービス利用中およびアカウント削除後合理的な期間保存されます</li>
+      </ul>
+
+      <h2>5. 第三者への情報提供</h2>
+      <p>本サービスは、以下の場合を除き、お客様の個人情報を第三者に提供しません。</p>
+      <ul>
+        <li>お客様の同意がある場合</li>
+        <li>法令に基づく場合</li>
+        <li>決済処理のため（Stripe, Inc.への提供）</li>
+        <li>サービス提供に必要な業務委託先への提供（適切な監督の下で）</li>
+      </ul>
+
+      <h2>6. 外部サービス</h2>
+      <p>本サービスは以下の外部サービスを利用しています。</p>
+      <ul>
+        <li><strong>LINE Messaging API</strong>: メッセージの送受信に使用（<a href="https://line.me/ja/terms/" target="_blank" rel="noopener">LINEプライバシーポリシー</a>）</li>
+        <li><strong>Stripe</strong>: 決済処理に使用（<a href="https://stripe.com/jp/privacy" target="_blank" rel="noopener">Stripeプライバシーポリシー</a>）</li>
+        <li><strong>Cloudflare</strong>: サーバーインフラに使用（<a href="https://www.cloudflare.com/ja-jp/privacypolicy/" target="_blank" rel="noopener">Cloudflareプライバシーポリシー</a>）</li>
+      </ul>
+
+      <h2>7. セキュリティ</h2>
+      <p>本サービスは、お客様の情報を保護するために以下の対策を講じています。</p>
+      <ul>
+        <li>エンドツーエンド暗号化によるメッセージ保護</li>
+        <li>HTTPS通信の使用</li>
+        <li>アクセス制御の実施</li>
+        <li>定期的なセキュリティレビュー</li>
+      </ul>
+
+      <h2>8. お客様の権利</h2>
+      <p>お客様は、ご自身の個人情報について以下の権利を有します。</p>
+      <ul>
+        <li>個人情報の開示請求</li>
+        <li>個人情報の訂正・削除請求</li>
+        <li>サービスの利用停止（アカウント削除）</li>
+      </ul>
+      <p>これらの権利を行使される場合は、お問い合わせ先までご連絡ください。</p>
+
+      <h2>9. Cookieの使用</h2>
+      <p>本サービスのウェブサイトでは、サービス改善のためにCookieを使用する場合があります。ブラウザの設定によりCookieを無効にすることができますが、一部の機能が利用できなくなる場合があります。</p>
+
+      <h2>10. 改定</h2>
+      <p>本プライバシーポリシーは、法令の改正やサービス内容の変更に伴い、予告なく改定する場合があります。重要な変更がある場合は、本サービス上でお知らせします。</p>
+
+      <h2>11. お問い合わせ</h2>
+      <p>本プライバシーポリシーに関するお問い合わせは、以下までご連絡ください。</p>
+      <p>メールアドレス: saneru104@gmail.com</p>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <a href="/">ホーム</a>
+      <a href="tokushoho.html">特定商取引法</a>
+      <a href="terms.html">利用規約</a>
+      <p style="margin-top: 16px; color: #999;">&copy; 2026 LINE Notes Sync</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>サブスクリプション管理 - LINE Notes Sync</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: #f8f9fa;
+      min-height: 100vh;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #eee;
+      padding: 16px 0;
+    }
+
+    header .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: #06c755;
+      text-decoration: none;
+    }
+
+    nav a {
+      color: #666;
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      color: #333;
+    }
+
+    @media (max-width: 600px) {
+      header .container {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      nav a {
+        margin: 0 12px;
+      }
+    }
+
+    main {
+      padding: 40px 20px;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .page-title h1 {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .page-title p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .portal-card {
+      background: #06c755;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      color: white;
+    }
+
+    .portal-card h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    .portal-features {
+      list-style: none;
+      margin: 0;
+    }
+
+    .portal-features li {
+      padding: 6px 0 6px 28px;
+      font-size: 14px;
+      position: relative;
+    }
+
+    .portal-features li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+    }
+
+    .portal-features li::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-60%) rotate(45deg);
+      width: 5px;
+      height: 9px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .label-hint {
+      font-weight: normal;
+      color: #888;
+      font-size: 12px;
+      display: block;
+      margin-top: 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #06c755;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      color: white;
+      background: #06c755;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #05b34c;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: #d32f2f;
+      margin-top: 12px;
+      padding: 12px;
+      background: #ffebee;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+
+    .back-link a {
+      color: #06c755;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo">LINE Notes Sync</a>
+      <nav>
+        <a href="/#features">機能</a>
+        <a href="/#pricing">料金</a>
+        <a href="/#faq">FAQ</a>
+        <a href="tokushoho.html">特定商取引法</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-title">
+      <h1>サブスクリプション管理</h1>
+      <p>Stripeカスタマーポータルで管理できます</p>
+    </div>
+
+    <div class="portal-card">
+      <h2>管理できる項目</h2>
+      <ul class="portal-features">
+        <li>支払い方法の変更</li>
+        <li>請求履歴の確認</li>
+        <li>サブスクリプションのキャンセル</li>
+      </ul>
+    </div>
+
+    <div class="form-group">
+      <label>
+        LINE User ID
+        <span class="label-hint">プレミアムプラン購入時に使用したIDを入力してください</span>
+      </label>
+      <input type="text" id="lineUserId" placeholder="例: U1234567890abcdef...">
+    </div>
+
+    <button id="portalButton">管理画面を開く</button>
+
+    <div id="error" class="error" style="display: none;"></div>
+
+    <div class="back-link">
+      <a href="/">トップページに戻る</a>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE_URL = 'https://line-to-obsidian.line-to-obsidian.workers.dev';
+
+    // Get userId from URL params if present
+    const params = new URLSearchParams(window.location.search);
+    const urlUserId = params.get('userId');
+    if (urlUserId) {
+      document.getElementById('lineUserId').value = urlUserId;
+    }
+
+    document.getElementById('portalButton').addEventListener('click', async () => {
+      const lineUserId = document.getElementById('lineUserId').value.trim();
+      const errorDiv = document.getElementById('error');
+      const button = document.getElementById('portalButton');
+
+      errorDiv.style.display = 'none';
+
+      if (!lineUserId) {
+        errorDiv.textContent = 'LINE User IDを入力してください';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = '処理中...';
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/stripe/create-portal-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lineUserId }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'ポータルセッション作成に失敗しました');
+        }
+
+        const { url } = await response.json();
+        window.location.href = url;
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.style.display = 'block';
+        button.disabled = false;
+        button.textContent = '管理画面を開く';
+      }
+    });
+  </script>
+</body>
+</html>

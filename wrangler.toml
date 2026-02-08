@@ -8,8 +8,21 @@ compatibility_flags = ["nodejs_compat"]
 kv_namespaces = [
   { binding = "LINE_MESSAGES", id = "27d7dbccef1b42fc9e0c4fde1e9fe005" },
   { binding = "LINE_USER_MAPPINGS", id = "65f9de2e1c514dd3aae66f79f6ceb936" },
-  { binding = "LINE_PUBLIC_KEYS", id = "7d09ceac83cd47d28ebab563201208bb" }
+  { binding = "LINE_PUBLIC_KEYS", id = "7d09ceac83cd47d28ebab563201208bb" },
+  { binding = "LINE_SUBSCRIPTIONS", id = "b006bae6a30647758ae0d03501181dec" }
 ]
+
+# All sensitive values are managed via `wrangler secret put`:
+# - STRIPE_SECRET_KEY
+# - STRIPE_WEBHOOK_SECRET
+# - STRIPE_PUBLISHABLE_KEY
+# - STRIPE_PRICE_ID
+# - PAYMENT_PAGE_URL
+
+# R2 bucket for image storage
+[[r2_buckets]]
+binding = "LINE_IMAGES"
+bucket_name = "line-images"
 
 # wrangler.toml (wrangler v3.88.0^)
 [observability.logs]
@@ -24,5 +37,16 @@ name = "line-to-obsidian-dev"
 kv_namespaces = [
   { binding = "LINE_MESSAGES", id = "d874dd512f06435da9003ca674fdea1e", preview_id = "d874dd512f06435da9003ca674fdea1e" },
   { binding = "LINE_USER_MAPPINGS", id = "7b0098cda3b145c6bb9675e7e872cc29", preview_id = "7b0098cda3b145c6bb9675e7e872cc29" },
-  { binding = "LINE_PUBLIC_KEYS", id = "6e05ea177e1a47abbed6997d6c53bd64", preview_id = "6e05ea177e1a47abbed6997d6c53bd64" }
+  { binding = "LINE_PUBLIC_KEYS", id = "6e05ea177e1a47abbed6997d6c53bd64", preview_id = "6e05ea177e1a47abbed6997d6c53bd64" },
+  { binding = "LINE_SUBSCRIPTIONS", id = "a4fe8bdc80a2450ca8ff07084bf3285d", preview_id = "a4fe8bdc80a2450ca8ff07084bf3285d" }
 ]
+
+# Development environment secrets are set via:
+# wrangler secret put STRIPE_PUBLISHABLE_KEY --env development
+# wrangler secret put STRIPE_PRICE_ID --env development
+# wrangler secret put PAYMENT_PAGE_URL --env development
+
+[[env.development.r2_buckets]]
+binding = "LINE_IMAGES"
+bucket_name = "line-images-dev"
+preview_bucket_name = "line-images-dev"
