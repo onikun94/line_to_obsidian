@@ -19,6 +19,7 @@ export async function createCheckoutSession(params: {
     'success_url': params.successUrl,
     'cancel_url': params.cancelUrl,
     'metadata[lineUserId]': params.lineUserId,
+    'allow_promotion_codes': 'true',
   });
 
   const response = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
