@@ -15,6 +15,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   auto-release:
@@ -77,6 +79,14 @@ jobs:
           NODE_ENV: production
         run: pnpm --filter obsidian-plugin build
 
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            packages/obsidian-plugin/main.js
+            packages/obsidian-plugin/styles.css
+            manifest.json
+
       - name: Push changes
         run: |
           git push origin main
@@ -86,12 +96,6 @@ jobs:
           git tag ${{ steps.version_update.outputs.new_version }}
           git push origin ${{ steps.version_update.outputs.new_version }}
 
-      - name: Prepare release files
-        run: |
-          mkdir ${{ github.event.repository.name }}
-          cp packages/obsidian-plugin/main.js manifest.json ${{ github.event.repository.name }}/
-          zip -r ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}
-
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,9 +103,9 @@ jobs:
           gh release create "${{ steps.version_update.outputs.new_version }}" \
             --title="${{ steps.version_update.outputs.new_version }}" \
             --generate-notes \
-            ${{ github.event.repository.name }}.zip \
             packages/obsidian-plugin/main.js \
-            manifest.json \
+            packages/obsidian-plugin/styles.css \
+            manifest.json
 
       - name: Release completion notification
         run: |
