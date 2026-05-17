@@ -68,10 +68,6 @@ export class KeyManager {
       delete data.registrationFailureCount;
       delete data.lastRegistrationAttempt;
       await this.plugin.saveData(data);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Public key registration completed successfully');
-      }
     } catch (error) {
       // Failure: update retry information
       data.pendingKeyRegistration = true;

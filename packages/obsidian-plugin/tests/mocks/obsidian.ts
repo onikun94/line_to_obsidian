@@ -182,6 +182,19 @@ export class TFolder {
 // App クラスのモック
 export const App = vi.fn().mockImplementation(() => mockApp);
 
+// Platform オブジェクトのモック
+export const Platform = {
+  isMacOS: true,
+  isWin: false,
+  isLinux: false,
+  isIosApp: false,
+  isAndroidApp: false,
+  isMobile: false,
+  isMobileApp: false,
+  isDesktop: true,
+  isDesktopApp: true,
+};
+
 // デフォルトエクスポート
 export default {
   Plugin,
@@ -197,4 +210,5 @@ export default {
   TFile,
   TFolder,
   App,
-}; 
+  Platform,
+};

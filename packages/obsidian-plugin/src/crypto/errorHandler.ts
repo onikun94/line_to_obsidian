@@ -37,7 +37,7 @@ export class E2EEErrorHandler {
   /**
    * Main error handling entry point
    */
-  async handleError(error: Error, context: string): Promise<any> {
+  async handleError(error: Error, context: string): Promise<string | void> {
     if (process.env.NODE_ENV === 'development') {
       console.error(`E2EE Error in ${context}:`, error);
     }
@@ -135,12 +135,6 @@ export class E2EEErrorHandler {
    * Handles public key fetch failures
    */
   private async handlePublicKeyFetchFailed(error: E2EEError): Promise<void> {
-    const userId = this.extractUserIdFromError(error);
-    
-    if (userId) {
-      await this.markUserAsOffline(userId);
-    }
-
     throw error;
   }
 
@@ -169,35 +163,6 @@ export class E2EEErrorHandler {
   private extractUserIdFromError(error: E2EEError): string | null {
     const match = error.message.match(/user\s+(\w+)/i);
     return match ? match[1] : null;
-  }
-
-  /**
-   * Checks if decryption error was recently shown
-   */
-  private hasShownDecryptionError(): boolean {
-    const lastShown = localStorage.getItem('line_plugin_error_shown');
-    if (!lastShown) return false;
-    
-    const lastShownTime = parseInt(lastShown);
-    const now = Date.now();
-    
-    return now - lastShownTime < 60 * 60 * 1000;
-  }
-
-  /**
-   * Records when decryption error was shown
-   */
-  private markDecryptionErrorShown(): void {
-    localStorage.setItem('line_plugin_error_shown', Date.now().toString());
-  }
-
-  /**
-   * Marks a user as offline in local storage
-   */
-  private async markUserAsOffline(userId: string): Promise<void> {
-    const offlineUsers = JSON.parse(localStorage.getItem('line_plugin_offline_users') || '{}');
-    offlineUsers[userId] = Date.now();
-    localStorage.setItem('line_plugin_offline_users', JSON.stringify(offlineUsers));
   }
 
   /**

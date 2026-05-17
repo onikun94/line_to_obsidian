@@ -32,7 +32,7 @@ const context = await esbuild.context({
   entryPoints: ["src/main.ts"],
   bundle: true,
   define: {
-    'process.env.OBSIDIAN_LINE_API_URL': JSON.stringify(process.env.OBSIDIAN_LINE_API_URL)
+    'process.env.OBSIDIAN_LINE_API_URL': JSON.stringify(process.env.OBSIDIAN_LINE_API_URL ?? '')
   },
   external: [
     "obsidian",

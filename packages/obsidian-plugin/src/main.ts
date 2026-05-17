@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TextAreaComponent, TFile, TFolder, ToggleComponent } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, normalizePath, Modal, TFile, ToggleComponent } from 'obsidian';
 import { requestUrl } from 'obsidian';
 import { API_ENDPOINTS, PAYMENT_PAGE_URL } from './constants';
 import { KeyManager } from './crypto/keyManager';
@@ -154,9 +154,11 @@ export default class LinePlugin extends Plugin {
     this.setupAutoSync();
 
     if (this.settings.syncOnStartup) {
-      setTimeout(() => {
-        this.syncMessages(true);
-      }, 3000);
+      this.registerInterval(
+        activeWindow.setTimeout(() => {
+          void this.syncMessages(true);
+        }, 3000)
+      );
     }
   }
 
@@ -236,7 +238,7 @@ export default class LinePlugin extends Plugin {
       const intervalMs = interval * 60 * 60 * 1000;
 
       this.syncIntervalId = window.setInterval(() => {
-        this.syncMessages(true);
+        void this.syncMessages(true);
       }, intervalMs);
     }
   }
@@ -330,7 +332,7 @@ export default class LinePlugin extends Plugin {
       let messages: LineMessage[];
       try {
         messages = JSON.parse(responseText) as LineMessage[];
-      } catch (parseError) {
+      } catch {
         throw new Error('Invalid response format');
       }
 
@@ -396,7 +398,8 @@ export default class LinePlugin extends Plugin {
                 messageText = await this.messageEncryptor.processMessage(message);
               } catch (error) {
                 try {
-                  messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+                  const handled = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+                  messageText = handled ?? (message.text || '[メッセージを読み込めませんでした]');
                 } catch (handlerError) {
                   if (process.env.NODE_ENV === 'development') {
                     console.error(`Failed to process message ${message.messageId}:`, handlerError);
@@ -482,7 +485,8 @@ export default class LinePlugin extends Plugin {
               messageText = await this.messageEncryptor.processMessage(message);
             } catch (error) {
               try {
-                messageText = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+                const handled = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
+                messageText = handled ?? (message.text || '[メッセージを読み込めませんでした]');
               } catch (handlerError) {
                 if (process.env.NODE_ENV === 'development') {
                   console.error(`Failed to process message ${message.messageId}:`, handlerError);
@@ -1019,7 +1023,7 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    const autoSyncSetting = new Setting(containerEl)
+    new Setting(containerEl)
       .setName('Auto sync')
       .setDesc('LINEメッセージを自動的に同期するかどうか')
       .addToggle(toggle => toggle
@@ -1063,7 +1067,7 @@ class LineSettingTab extends PluginSettingTab {
         }));
 
     let organizeBydateToggle: ToggleComponent;
-    const organizeBydateSetting = new Setting(containerEl)
+    new Setting(containerEl)
       .setName('Organize by date')
       .setDesc('日付ごとにフォルダを作成してメッセージを整理するかどうか（注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます）')
       .addToggle(toggle => {
@@ -1160,23 +1164,18 @@ class LineSettingTab extends PluginSettingTab {
     groupedFileNameSetting.settingEl.toggle(this.plugin.settings.groupMessagesByDate);
 
     // Add an info box to explain the difference
-    const infoBox = containerEl.createDiv({ cls: 'setting-item-description' });
-    infoBox.style.backgroundColor = 'var(--background-secondary)';
-    infoBox.style.padding = '10px';
-    infoBox.style.borderRadius = '5px';
-    infoBox.style.marginBottom = '20px';
-    // Use DOM API instead of innerHTML
+    const infoBox = containerEl.createDiv({ cls: 'setting-item-description line-plugin-info-box' });
     infoBox.createEl('strong', { text: 'ファイル名の使い分け：' });
     infoBox.createEl('br');
-    infoBox.createEl('span', { text: '• ' });
+    infoBox.createSpan({ text: '• ' });
     infoBox.createEl('strong', { text: 'Group messages by date がオン：' });
-    infoBox.createEl('span', { text: ' 1日分のメッセージが1つのファイルにまとめられ、「Grouped file name template」が使用されます' });
+    infoBox.createSpan({ text: ' 1日分のメッセージが1つのファイルにまとめられ、「Grouped file name template」が使用されます' });
     infoBox.createEl('br');
-    infoBox.createEl('span', { text: '  ※ 固定のファイル名（例：{date}を使わずに「LINE-Messages」など）を設定すると、すべてのメッセージが常に同じファイルに追記されます' });
+    infoBox.createSpan({ text: '  ※ 固定のファイル名（例：{date}を使わずに「LINE-Messages」など）を設定すると、すべてのメッセージが常に同じファイルに追記されます' });
     infoBox.createEl('br');
-    infoBox.createEl('span', { text: '• ' });
+    infoBox.createSpan({ text: '• ' });
     infoBox.createEl('strong', { text: 'Group messages by date がオフ：' });
-    infoBox.createEl('span', { text: ' 各メッセージが個別のファイルとして保存され、「Individual message file name template」が使用されます' });
+    infoBox.createSpan({ text: ' 各メッセージが個別のファイルとして保存され、「Individual message file name template」が使用されます' });
 
     new Setting(containerEl)
       .setName('Individual message file name template')
@@ -1189,7 +1188,7 @@ class LineSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('div', {
+    containerEl.createDiv({
       text: '変数の説明:',
       cls: 'setting-item-description'
     });
@@ -1297,7 +1296,7 @@ class LineSettingTab extends PluginSettingTab {
             new Notice('サブスクリプション状態を更新しました');
             // Refresh the settings display
             this.display();
-          } catch (err) {
+          } catch {
             new Notice('サブスクリプション状態の取得に失敗しました');
           } finally {
             button.setDisabled(false);
@@ -1330,8 +1329,8 @@ class LineSettingTab extends PluginSettingTab {
         .setButtonText('Reset')
         .setWarning()
         .onClick(() => {
-          new ConfirmResetModal(this.app, async () => {
-            await this.plugin.resetMapping();
+          new ConfirmResetModal(this.app, () => {
+            void this.plugin.resetMapping();
           }).open();
         }));
   }

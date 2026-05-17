@@ -1,6 +1,20 @@
+import { Platform } from 'obsidian';
+
 export class CryptoUtils {
   private static encoder = new TextEncoder();
   private static decoder = new TextDecoder();
+
+  private static getPlatformFingerprint(): string {
+    const parts: string[] = [];
+    if (Platform.isMacOS) parts.push('macos');
+    if (Platform.isWin) parts.push('win');
+    if (Platform.isLinux) parts.push('linux');
+    if (Platform.isIosApp) parts.push('ios');
+    if (Platform.isAndroidApp) parts.push('android');
+    if (Platform.isMobileApp) parts.push('mobile');
+    if (Platform.isDesktopApp) parts.push('desktop');
+    return parts.join('-') || 'unknown';
+  }
 
   /**
    * RSA鍵ペアを生成
@@ -190,8 +204,8 @@ export class CryptoUtils {
   /**
    * ArrayBufferをBase64文字列に変換
    */
-  static arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
+  static arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
@@ -217,14 +231,13 @@ export class CryptoUtils {
    */
   static async generateDeviceId(): Promise<string> {
     const fingerprint = {
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      platform: navigator.platform,
-      hardwareConcurrency: navigator.hardwareConcurrency,
+      platform: this.getPlatformFingerprint(),
+      isMobile: Platform.isMobile,
+      isDesktop: Platform.isDesktop,
       timestamp: Date.now(),
       random: crypto.getRandomValues(new Uint8Array(16))
     };
-    
+
     const data = this.encoder.encode(JSON.stringify(fingerprint));
     const hash = await crypto.subtle.digest('SHA-256', data);
     return this.arrayBufferToBase64(hash);
