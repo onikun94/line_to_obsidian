@@ -40,7 +40,7 @@ export interface StripeWebhookEvent {
   id: string;
   type: string;
   data: {
-    object: any;
+    object: StripeCheckoutSession | StripeSubscription | StripeInvoice | Record<string, unknown>;
   };
 }
 

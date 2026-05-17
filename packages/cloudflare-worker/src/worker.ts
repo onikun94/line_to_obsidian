@@ -1,3 +1,4 @@
+/// <reference types="@cloudflare/workers-types" />
 import { Hono } from 'hono';
 import { cors } from 'hono/cors'
 import type { Context } from 'hono';
@@ -12,7 +13,7 @@ import {
   findUserByCustomerId,
   saveCustomerIndex
 } from './stripe/subscription';
-import type { SubscriptionData, StripeSubscription, StripeInvoice } from './stripe/types';
+import type { SubscriptionData, StripeCheckoutSession, StripeSubscription, StripeInvoice } from './stripe/types';
 
 interface Bindings {
   LINE_CHANNEL_ACCESS_TOKEN: string;
@@ -96,8 +97,8 @@ function pemToBase64(pem: string): string {
     .trim();
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -305,19 +306,20 @@ app.post('/webhook', async (c: Context) => {
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
-    const events = JSON.parse(body).events as line.WebhookEvent[];
+    const events = JSON.parse(body).events as line.webhook.Event[];
     
     for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
-        const userId = event.source.userId;
-        if (!userId) {
-          console.error('Missing userId in event');
+        const userId = event.source?.userId;
+        const replyToken = event.replyToken;
+        if (!userId || !replyToken) {
+          console.error('Missing userId or replyToken in event');
           continue;
         }
 
         // Handle /myid command - always show LINE User ID regardless of mapping status
         if (event.message.text === '/myid' || event.message.text === 'IDを確認') {
-          const client = new line.Client({
+          const client = new line.messagingApi.MessagingApiClient({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
           const existingVaultId = await getVaultIdForUser(c, userId);
@@ -326,16 +328,19 @@ app.post('/webhook', async (c: Context) => {
             ? `あなたのLINE User ID: ${userId}\n\n現在 Vault と連携中です。\n別のVaultに変更したい場合は、Obsidianプラグインの設定から「Reset Mapping」を実行してください。`
             : `あなたのLINE User ID: ${userId}\n\nObsidianプラグインの設定画面でこのIDを入力し、「Register Mapping」をクリックしてください。`;
 
-          await client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: replyText
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: replyText
+            }]
           });
           continue;
         }
 
         // Handle /status command - show subscription plan and image usage
         if (event.message.text === '/status') {
-          const client = new line.Client({
+          const client = new line.messagingApi.MessagingApiClient({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
           const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
@@ -350,9 +355,12 @@ app.post('/webhook', async (c: Context) => {
             statusText = `現在のプラン: 無料\n画像送信: 残り${remaining}枚 / ${subscription.freeLimit}枚\n\nプレミアムプラン（月額300円）で画像送信が無制限に:\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`;
           }
 
-          await client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: statusText
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: statusText
+            }]
           });
           continue;
         }
@@ -360,12 +368,15 @@ app.post('/webhook', async (c: Context) => {
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId}`);
-          const client = new line.Client({
+          const client = new line.messagingApi.MessagingApiClient({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
-          await client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`
+            }]
           });
           continue;
         }
@@ -383,12 +394,12 @@ app.post('/webhook', async (c: Context) => {
             ) as CryptoKey;
             
             const iv = crypto.getRandomValues(new Uint8Array(12));
-            
+
             const encoder = new TextEncoder();
             const encryptedContent = await crypto.subtle.encrypt(
-              { name: 'AES-GCM', iv },
+              { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
               aesKey,
-              encoder.encode(event.message.text)
+              encoder.encode(event.message.text).buffer as ArrayBuffer
             );
             
             const publicKeyBase64 = pemToBase64(publicKeyData.publicKey);
@@ -459,21 +470,25 @@ app.post('/webhook', async (c: Context) => {
 
       // Handle image messages
       if (event.type === 'message' && event.message.type === 'image') {
-        const userId = event.source.userId;
-        if (!userId) {
-          console.error('Missing userId in image event');
+        const userId = event.source?.userId;
+        const replyToken = event.replyToken;
+        if (!userId || !replyToken) {
+          console.error('Missing userId or replyToken in image event');
           continue;
         }
 
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId} (image)`);
-          const client = new line.Client({
+          const client = new line.messagingApi.MessagingApiClient({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
-          await client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: `画像を保存するにはObsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度画像を送信してください。`
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: `画像を保存するにはObsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度画像を送信してください。`
+            }]
           });
           continue;
         }
@@ -482,7 +497,7 @@ app.post('/webhook', async (c: Context) => {
         const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
 
         if (!canSendImage(subscription)) {
-          const client = new line.Client({
+          const client = new line.messagingApi.MessagingApiClient({
             channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
           });
 
@@ -490,12 +505,14 @@ app.post('/webhook', async (c: Context) => {
             ? `無料の画像送信枠（${subscription.freeLimit}枚）を使い切りました。\n\n引き続き画像を送信するには、プレミアムプラン（月額300円）へのアップグレードが必要です。\n\n▶ プレミアムプランに登録する\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
             : `サブスクリプションの支払いに問題があります。\n\n▶ 支払い状況を確認する\n${c.env.PAYMENT_PAGE_URL}/portal.html?userId=${userId}`;
 
-          await client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: limitMessage
+          await client.replyMessage({
+            replyToken,
+            messages: [{
+              type: 'text',
+              text: limitMessage
+            }]
           });
 
-          console.log(`Image send blocked for user ${userId}: ${subscription.status}, count: ${subscription.imageCount}/${subscription.freeLimit}`);
           continue;
         }
         // ===== End subscription check =====
@@ -522,12 +539,15 @@ app.post('/webhook', async (c: Context) => {
           // Check image size (10MB limit)
           if (imageData.byteLength > MAX_IMAGE_SIZE) {
             console.error(`Image too large: ${imageData.byteLength} bytes`);
-            const client = new line.Client({
+            const client = new line.messagingApi.MessagingApiClient({
               channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
             });
-            await client.replyMessage(event.replyToken, {
-              type: 'text',
-              text: '画像サイズが大きすぎます（上限: 10MB）。より小さい画像を送信してください。'
+            await client.replyMessage({
+              replyToken,
+              messages: [{
+                type: 'text',
+                text: '画像サイズが大きすぎます（上限: 10MB）。より小さい画像を送信してください。'
+              }]
             });
             continue;
           }
@@ -550,7 +570,7 @@ app.post('/webhook', async (c: Context) => {
 
               // Encrypt image data
               const encryptedContent = await crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv },
+                { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
                 aesKey,
                 imageData
               );
@@ -663,13 +683,16 @@ app.post('/webhook', async (c: Context) => {
           if (subscription.status === 'free') {
             const remaining = subscription.freeLimit - newCount;
             if (remaining === 3) {
-              const client = new line.Client({
+              const client = new line.messagingApi.MessagingApiClient({
                 channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
               });
               // Use pushMessage to avoid consuming replyToken
-              await client.pushMessage(userId, {
-                type: 'text',
-                text: `無料の画像送信枠が残り3枚になりました。\n\n枠を使い切った後も画像を送信したい場合は、プレミアムプラン（月額300円）をご検討ください。\n\n▶ プレミアムプランを見る\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
+              await client.pushMessage({
+                to: userId,
+                messages: [{
+                  type: 'text',
+                  text: `無料の画像送信枠が残り3枚になりました。\n\n枠を使い切った後も画像を送信したい場合は、プレミアムプラン（月額300円）をご検討ください。\n\n▶ プレミアムプランを見る\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
+                }]
               });
             }
           }
@@ -949,11 +972,9 @@ app.post('/stripe/webhook', async (c: Context) => {
       c.env.STRIPE_WEBHOOK_SECRET
     );
 
-    console.log(`Processing Stripe webhook: ${event.type}`);
-
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object;
+        const session = event.data.object as StripeCheckoutSession;
         const lineUserId = session.metadata?.lineUserId;
 
         if (!lineUserId) {
@@ -976,7 +997,6 @@ app.post('/stripe/webhook', async (c: Context) => {
           await saveCustomerIndex(c.env.LINE_SUBSCRIPTIONS, session.customer, lineUserId);
         }
 
-        console.log(`Subscription activated for user: ${lineUserId}`);
         break;
       }
 
@@ -1011,7 +1031,6 @@ app.post('/stripe/webhook', async (c: Context) => {
           currentPeriodEnd: subscription.current_period_end * 1000,
         });
 
-        console.log(`Subscription updated for user: ${lineUserId}, status: ${status}`);
         break;
       }
 
@@ -1031,7 +1050,6 @@ app.post('/stripe/webhook', async (c: Context) => {
           currentPeriodEnd: null,
         });
 
-        console.log(`Subscription canceled for user: ${lineUserId}`);
         break;
       }
 
@@ -1049,7 +1067,6 @@ app.post('/stripe/webhook', async (c: Context) => {
           status: 'past_due',
         });
 
-        console.log(`Payment failed for user: ${lineUserId}`);
         break;
       }
 
@@ -1068,13 +1085,12 @@ app.post('/stripe/webhook', async (c: Context) => {
           await updateSubscription(c.env.LINE_SUBSCRIPTIONS, lineUserId, {
             status: 'active',
           });
-          console.log(`Payment recovered for user: ${lineUserId}`);
         }
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        break;
     }
 
     return c.json({ received: true });
