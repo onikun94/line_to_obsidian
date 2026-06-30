@@ -2,7 +2,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors'
 import type { Context } from 'hono';
-import * as line from '@line/bot-sdk';
 import { createCheckoutSession, createPortalSession, verifyWebhookSignature } from './stripe/client';
 import {
   getSubscription,
@@ -73,6 +72,25 @@ interface ImageMessage {
   r2Key: string;
 }
 
+interface LineTextMessage {
+  type: 'text';
+  text: string;
+}
+
+interface LineWebhookEvent {
+  type: string;
+  timestamp: number;
+  replyToken?: string;
+  source?: {
+    userId?: string;
+  };
+  message?: {
+    id: string;
+    type: 'text' | 'image' | string;
+    text?: string;
+  };
+}
+
 // Maximum image size: 10MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 // Image expiration: 7 days
@@ -104,6 +122,66 @@ function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+async function validateLineSignature(body: string, channelSecret: string, signature: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(channelSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signed = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+  return timingSafeStringEqual(arrayBufferToBase64(signed), signature);
+}
+
+async function callLineMessageApi(
+  channelAccessToken: string,
+  endpoint: 'reply' | 'push',
+  payload: unknown
+): Promise<void> {
+  const response = await fetch(`https://api.line.me/v2/bot/message/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${channelAccessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`LINE ${endpoint} API failed: ${response.status}`);
+  }
+}
+
+async function replyMessage(
+  channelAccessToken: string,
+  replyToken: string,
+  messages: LineTextMessage[]
+): Promise<void> {
+  await callLineMessageApi(channelAccessToken, 'reply', { replyToken, messages });
+}
+
+async function pushMessage(
+  channelAccessToken: string,
+  to: string,
+  messages: LineTextMessage[]
+): Promise<void> {
+  await callLineMessageApi(channelAccessToken, 'push', { to, messages });
 }
 
 app.use('*', cors({
@@ -301,48 +379,44 @@ app.post('/webhook', async (c: Context) => {
     }
 
     const body = await c.req.text();
-    const isValid = line.validateSignature(body, c.env.LINE_CHANNEL_SECRET, signature);
+    const isValid = await validateLineSignature(body, c.env.LINE_CHANNEL_SECRET, signature);
     if (!isValid) {
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
-    const events = JSON.parse(body).events as line.webhook.Event[];
+    const events = JSON.parse(body).events as LineWebhookEvent[];
     
     for (const event of events) {
-      if (event.type === 'message' && event.message.type === 'text') {
+      if (event.type === 'message' && event.message?.type === 'text') {
         const userId = event.source?.userId;
         const replyToken = event.replyToken;
+        const messageText = event.message.text ?? '';
         if (!userId || !replyToken) {
           console.error('Missing userId or replyToken in event');
           continue;
         }
 
         // Handle /myid command - always show LINE User ID regardless of mapping status
-        if (event.message.text === '/myid' || event.message.text === 'IDを確認') {
-          const client = new line.messagingApi.MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-          });
+        if (messageText === '/myid' || messageText === 'IDを確認') {
           const existingVaultId = await getVaultIdForUser(c, userId);
 
           const replyText = existingVaultId
             ? `あなたのLINE User ID: ${userId}\n\n現在 Vault と連携中です。\n別のVaultに変更したい場合は、Obsidianプラグインの設定から「Reset Mapping」を実行してください。`
             : `あなたのLINE User ID: ${userId}\n\nObsidianプラグインの設定画面でこのIDを入力し、「Register Mapping」をクリックしてください。`;
 
-          await client.replyMessage({
+          await replyMessage(
+            c.env.LINE_CHANNEL_ACCESS_TOKEN,
             replyToken,
-            messages: [{
+            [{
               type: 'text',
               text: replyText
             }]
-          });
+          );
           continue;
         }
 
         // Handle /status command - show subscription plan and image usage
-        if (event.message.text === '/status') {
-          const client = new line.messagingApi.MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-          });
+        if (messageText === '/status') {
           const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
 
           let statusText: string;
@@ -355,29 +429,28 @@ app.post('/webhook', async (c: Context) => {
             statusText = `現在のプラン: 無料\n画像送信: 残り${remaining}枚 / ${subscription.freeLimit}枚\n\nプレミアムプラン（月額300円）で画像送信が無制限に:\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`;
           }
 
-          await client.replyMessage({
+          await replyMessage(
+            c.env.LINE_CHANNEL_ACCESS_TOKEN,
             replyToken,
-            messages: [{
+            [{
               type: 'text',
               text: statusText
             }]
-          });
+          );
           continue;
         }
 
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId}`);
-          const client = new line.messagingApi.MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-          });
-          await client.replyMessage({
+          await replyMessage(
+            c.env.LINE_CHANNEL_ACCESS_TOKEN,
             replyToken,
-            messages: [{
+            [{
               type: 'text',
               text: `Obsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度メッセージを送信してください。`
             }]
-          });
+          );
           continue;
         }
 
@@ -399,7 +472,7 @@ app.post('/webhook', async (c: Context) => {
             const encryptedContent = await crypto.subtle.encrypt(
               { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
               aesKey,
-              encoder.encode(event.message.text).buffer as ArrayBuffer
+              encoder.encode(messageText).buffer as ArrayBuffer
             );
             
             const publicKeyBase64 = pemToBase64(publicKeyData.publicKey);
@@ -443,7 +516,7 @@ app.post('/webhook', async (c: Context) => {
               timestamp: event.timestamp,
               messageId: event.message.id,
               userId: userId,
-              text: event.message.text,
+              text: messageText,
               vaultId: vaultId,
               synced: false,
               encrypted: false
@@ -454,7 +527,7 @@ app.post('/webhook', async (c: Context) => {
             timestamp: event.timestamp,
             messageId: event.message.id,
             userId: userId,
-            text: event.message.text,
+            text: messageText,
             vaultId: vaultId,
             synced: false,
             encrypted: false
@@ -469,7 +542,7 @@ app.post('/webhook', async (c: Context) => {
       }
 
       // Handle image messages
-      if (event.type === 'message' && event.message.type === 'image') {
+      if (event.type === 'message' && event.message?.type === 'image') {
         const userId = event.source?.userId;
         const replyToken = event.replyToken;
         if (!userId || !replyToken) {
@@ -480,16 +553,14 @@ app.post('/webhook', async (c: Context) => {
         const vaultId = await getVaultIdForUser(c, userId);
         if (!vaultId) {
           console.error(`No vault mapping found for user ${userId} (image)`);
-          const client = new line.messagingApi.MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-          });
-          await client.replyMessage({
+          await replyMessage(
+            c.env.LINE_CHANNEL_ACCESS_TOKEN,
             replyToken,
-            messages: [{
+            [{
               type: 'text',
               text: `画像を保存するにはObsidianとの連携設定が必要です。\n\nあなたのLINE User ID: ${userId}\n\n1. 上記のIDをObsidianプラグインの設定画面で入力\n2. "Register Mapping"ボタンをクリック\n\n設定完了後、もう一度画像を送信してください。`
             }]
-          });
+          );
           continue;
         }
 
@@ -497,21 +568,18 @@ app.post('/webhook', async (c: Context) => {
         const subscription = await getSubscription(c.env.LINE_SUBSCRIPTIONS, userId);
 
         if (!canSendImage(subscription)) {
-          const client = new line.messagingApi.MessagingApiClient({
-            channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-          });
-
           const limitMessage = subscription.status === 'free'
             ? `無料の画像送信枠（${subscription.freeLimit}枚）を使い切りました。\n\n引き続き画像を送信するには、プレミアムプラン（月額300円）へのアップグレードが必要です。\n\n▶ プレミアムプランに登録する\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
             : `サブスクリプションの支払いに問題があります。\n\n▶ 支払い状況を確認する\n${c.env.PAYMENT_PAGE_URL}/portal.html?userId=${userId}`;
 
-          await client.replyMessage({
+          await replyMessage(
+            c.env.LINE_CHANNEL_ACCESS_TOKEN,
             replyToken,
-            messages: [{
+            [{
               type: 'text',
               text: limitMessage
             }]
-          });
+          );
 
           continue;
         }
@@ -539,16 +607,14 @@ app.post('/webhook', async (c: Context) => {
           // Check image size (10MB limit)
           if (imageData.byteLength > MAX_IMAGE_SIZE) {
             console.error(`Image too large: ${imageData.byteLength} bytes`);
-            const client = new line.messagingApi.MessagingApiClient({
-              channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-            });
-            await client.replyMessage({
+            await replyMessage(
+              c.env.LINE_CHANNEL_ACCESS_TOKEN,
               replyToken,
-              messages: [{
+              [{
                 type: 'text',
                 text: '画像サイズが大きすぎます（上限: 10MB）。より小さい画像を送信してください。'
               }]
-            });
+            );
             continue;
           }
 
@@ -683,17 +749,15 @@ app.post('/webhook', async (c: Context) => {
           if (subscription.status === 'free') {
             const remaining = subscription.freeLimit - newCount;
             if (remaining === 3) {
-              const client = new line.messagingApi.MessagingApiClient({
-                channelAccessToken: c.env.LINE_CHANNEL_ACCESS_TOKEN
-              });
               // Use pushMessage to avoid consuming replyToken
-              await client.pushMessage({
-                to: userId,
-                messages: [{
+              await pushMessage(
+                c.env.LINE_CHANNEL_ACCESS_TOKEN,
+                userId,
+                [{
                   type: 'text',
                   text: `無料の画像送信枠が残り3枚になりました。\n\n枠を使い切った後も画像を送信したい場合は、プレミアムプラン（月額300円）をご検討ください。\n\n▶ プレミアムプランを見る\n${c.env.PAYMENT_PAGE_URL}?userId=${userId}`
                 }]
-              });
+              );
             }
           }
           // ===== End increment and notify =====
@@ -1156,4 +1220,4 @@ app.get('/subscription/:lineUserId', async (c: Context) => {
   }
 });
 
-export default app; 
+export default app;

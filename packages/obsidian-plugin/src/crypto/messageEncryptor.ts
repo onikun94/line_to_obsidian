@@ -54,10 +54,7 @@ export class MessageEncryptor {
         timestamp: Date.now(),
         version: this.VERSION
       };
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Encryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to encrypt message');
     }
   }
@@ -68,9 +65,7 @@ export class MessageEncryptor {
   async decryptMessage(encryptedMessage: EncryptedMessage): Promise<string> {
     try {
       if (encryptedMessage.version !== this.VERSION) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`);
-        }
+        throw new Error(`Unsupported message version: ${encryptedMessage.version}`);
       }
       
       const keyPair = this.keyManager.getKeyPair();
@@ -84,10 +79,7 @@ export class MessageEncryptor {
       const decrypted = await CryptoUtils.decryptMessage(encryptedContent, aesKey, iv);
       
       return decrypted;
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Decryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to decrypt message');
     }
   }
@@ -122,9 +114,6 @@ export class MessageEncryptor {
     }
 
     if (!message || typeof message !== 'object') {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Unknown message format:', message);
-      }
       return JSON.stringify(message);
     }
 
@@ -142,10 +131,7 @@ export class MessageEncryptor {
           version: typeof m.version === 'string' ? m.version : '1.0'
         };
         return await this.decryptMessage(encryptedMessage);
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to decrypt message:', error);
-        }
+      } catch {
         return '[メッセージを読み込めませんでした]';
       }
     }
@@ -154,9 +140,6 @@ export class MessageEncryptor {
       return message.text;
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Unknown message format:', message);
-    }
     return JSON.stringify(message);
   }
 
@@ -240,10 +223,7 @@ export class MessageEncryptor {
       );
 
       return decryptedData;
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Image decryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to decrypt image');
     }
   }

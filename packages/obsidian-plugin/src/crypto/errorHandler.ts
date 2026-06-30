@@ -38,10 +38,6 @@ export class E2EEErrorHandler {
    * Main error handling entry point
    */
   async handleError(error: Error, context: string): Promise<string | void> {
-    if (process.env.NODE_ENV === 'development') {
-      console.error(`E2EE Error in ${context}:`, error);
-    }
-
     if (error instanceof E2EEError) {
       switch (error.type) {
         case E2EEErrorType.KEY_NOT_INITIALIZED:
@@ -74,9 +70,6 @@ export class E2EEErrorHandler {
     try {
       await this.keyManager.initialize();
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Failed to initialize keys:', error);
-      }
       new Notice('接続エラーが発生しました。設定を確認してください。');
       throw new E2EEError(
         E2EEErrorType.KEY_GENERATION_FAILED,
@@ -123,11 +116,7 @@ export class E2EEErrorHandler {
   /**
    * Handles decryption failures gracefully
    */
-  private async handleDecryptionFailed(error: E2EEError): Promise<string> {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Decryption failed:', error);
-    }
-    
+  private async handleDecryptionFailed(_error: E2EEError): Promise<string> {
     return '[メッセージを読み込めませんでした]';
   }
 
@@ -150,9 +139,6 @@ export class E2EEErrorHandler {
    * Handles unexpected errors
    */
   private handleGenericError(error: Error): void {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Unexpected E2EE error:', error);
-    }
     new Notice('処理中にエラーが発生しました');
     throw error;
   }

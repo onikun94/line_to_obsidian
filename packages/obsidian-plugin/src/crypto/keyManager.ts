@@ -68,19 +68,12 @@ export class KeyManager {
       delete data.registrationFailureCount;
       delete data.lastRegistrationAttempt;
       await this.plugin.saveData(data);
-    } catch (error) {
+    } catch {
       // Failure: update retry information
       data.pendingKeyRegistration = true;
       data.lastRegistrationAttempt = Date.now();
       data.registrationFailureCount = failureCount + 1;
       await this.plugin.saveData(data);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.error(
-          `Public key registration failed (attempt ${failureCount + 1}):`, 
-          error
-        );
-      }
     }
   }
 
@@ -203,10 +196,6 @@ export class KeyManager {
         throw new Error(`Failed to register public key: ${response.status}`);
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Failed to register public key:', error);
-      }
-      
       // For initial registration from generateAndSaveKeys, we need to save the pending flag
       const data = await this.plugin.loadData();
       data.pendingKeyRegistration = true;

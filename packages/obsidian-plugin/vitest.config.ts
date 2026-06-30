@@ -3,7 +3,7 @@ import path from 'path';
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
+    environment: 'happy-dom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     coverage: {
@@ -28,4 +28,4 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   }
-}); 
+});

@@ -130,10 +130,8 @@ export default class LinePlugin extends Plugin {
     if (this.settings.lineUserId && this.settings.vaultId) {
       try {
         await this.keyManager.initialize();
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize E2EE:', error);
-        }
+      } catch {
+        // Sync falls back to unreadable-message placeholders if E2EE cannot initialize.
       }
     }
 
@@ -277,13 +275,9 @@ export default class LinePlugin extends Plugin {
         this.settings.freeLimit = data.freeLimit;
         await this.saveSettings();
         return true;
-      } else {
-        console.warn(`Subscription status fetch returned status ${response.status}`);
-        return false;
       }
-    } catch (err) {
-      // Log the error but don't throw - sync should continue
-      console.warn('Failed to fetch subscription status:', err instanceof Error ? err.message : 'Unknown error');
+      return false;
+    } catch {
       return false;
     }
   }
@@ -304,10 +298,8 @@ export default class LinePlugin extends Plugin {
     if (!keys && this.settings.lineUserId) {
       try {
         await this.keyManager.initialize();
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize E2EE during sync:', error);
-        }
+      } catch {
+        // Continue syncing; encrypted messages will use the standard unreadable placeholder.
       }
     }
 
@@ -400,10 +392,7 @@ export default class LinePlugin extends Plugin {
                 try {
                   const handled = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
                   messageText = handled ?? (message.text || '[メッセージを読み込めませんでした]');
-                } catch (handlerError) {
-                  if (process.env.NODE_ENV === 'development') {
-                    console.error(`Failed to process message ${message.messageId}:`, handlerError);
-                  }
+                } catch {
                   messageText = message.text || '[メッセージを読み込めませんでした]';
                 }
               }
@@ -442,10 +431,8 @@ export default class LinePlugin extends Plugin {
             } else {
               await this.app.vault.create(normalizedFilePath, finalContent);
             }
-          } catch (err) {
-            if (process.env.NODE_ENV === 'development') {
-              console.error(`Error processing messages for date ${dateString}: ${err}`);
-            }
+          } catch {
+            // Skip the date group that failed and continue with the remaining messages.
           }
         }
       } else {
@@ -487,10 +474,7 @@ export default class LinePlugin extends Plugin {
               try {
                 const handled = await this.errorHandler.handleError(error as Error, `message_${message.messageId}`);
                 messageText = handled ?? (message.text || '[メッセージを読み込めませんでした]');
-              } catch (handlerError) {
-                if (process.env.NODE_ENV === 'development') {
-                  console.error(`Failed to process message ${message.messageId}:`, handlerError);
-                }
+              } catch {
                 messageText = message.text || '[メッセージを読み込めませんでした]';
               }
             }
@@ -509,10 +493,8 @@ export default class LinePlugin extends Plugin {
             await this.app.vault.create(normalizedFilePath, content);
             newMessageCount++;
             syncedMessageIds.push(message.messageId);
-          } catch (err) {
-            if (process.env.NODE_ENV === 'development') {
-              console.error(`Error processing message ${message.messageId}: ${err}`);
-            }
+          } catch {
+            // Skip the failed message and continue syncing subsequent messages.
           }
         }
       }
@@ -573,9 +555,6 @@ export default class LinePlugin extends Plugin {
           });
 
           if (contentResponse.status !== 200) {
-            if (process.env.NODE_ENV === 'development') {
-              console.error(`Failed to fetch image content: ${contentResponse.status}`);
-            }
             continue;
           }
 
@@ -617,10 +596,8 @@ export default class LinePlugin extends Plugin {
 
           newImageCount++;
           syncedImageIds.push(image.messageId);
-        } catch (err) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error(`Error processing image ${image.messageId}:`, err);
-          }
+        } catch {
+          // Skip the failed image and continue syncing subsequent images.
         }
       }
 
@@ -629,10 +606,7 @@ export default class LinePlugin extends Plugin {
       }
 
       return newImageCount;
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error syncing images:', err);
-      }
+    } catch {
       return 0;
     }
   }
@@ -780,23 +754,16 @@ export default class LinePlugin extends Plugin {
       });
 
       if (response.status !== 200) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error(`Failed to update image sync status: ${response.status}`);
-        }
+        return;
       }
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error(`Error updating image sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      }
+    } catch {
+      return;
     }
   }
 
   private async updateSyncStatus(messageIds: string[]) {
     try {
       if (!this.settings.lineUserId) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('LINE User ID not configured. Cannot update sync status.');
-        }
         return;
       }
 
@@ -814,14 +781,10 @@ export default class LinePlugin extends Plugin {
       });
 
       if (response.status !== 200) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error(`Failed to update sync status: ${response.status}`);
-        }
+        return;
       }
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error(`Error updating sync status: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      }
+    } catch {
+      return;
     }
   }
 
@@ -834,9 +797,7 @@ export default class LinePlugin extends Plugin {
         throw error;
       }
 
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Key initialization reported an error, retrying public key registration with existing keys:', error);
-      }
+      // Existing keys are enough to refresh the Worker-side public key.
     }
 
     await this.keyManager.forceRegisterPublicKey();
@@ -875,9 +836,6 @@ export default class LinePlugin extends Plugin {
       try {
         await this.registerCurrentPublicKey();
       } catch (keyError) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to register public key after mapping:', keyError);
-        }
         new Notice(`マッピングは登録されましたが、E2EE公開鍵の登録に失敗しました: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`);
         return;
       }
