@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Notice, requestUrl } from 'obsidian';
 import LinePlugin from '../../src/main';
 
 // Obsidian APIのモック
@@ -294,6 +295,93 @@ describe('LinePlugin', () => {
       // resetMappingのロジックをテスト
       const shouldProceed = !!(plugin.settings.lineUserId && plugin.settings.vaultId);
       expect(shouldProceed).toBe(true);
+    });
+  });
+
+  describe('マッピング登録', () => {
+    it('マッピング登録後に既存のE2EE公開鍵を強制再登録する', async () => {
+      const initialize = vi.fn().mockResolvedValue(undefined);
+      const loadKeys = vi.fn().mockResolvedValue({ keyId: 'key-1' });
+      const forceRegisterPublicKey = vi.fn().mockResolvedValue(undefined);
+
+      plugin.keyManager = {
+        initialize,
+        loadKeys,
+        forceRegisterPublicKey
+      } as any;
+
+      plugin.settings = {
+        noteFolderPath: 'LINE',
+        vaultId: ' test-vault ',
+        lineUserId: ' test-user ',
+        autoSync: false,
+        syncInterval: 1,
+        syncOnStartup: false,
+        organizeByDate: false,
+        fileNameTemplate: '{date}-{messageId}',
+        e2eeEnabled: true,
+        groupMessagesByDate: false,
+        groupedMessageTemplate: '{time}: {text}',
+        groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
+        groupedFileNameTemplate: '{date}',
+        syncImages: true,
+        imageFolderPath: 'LINE/images',
+        imageFileNameTemplate: '{date}-{messageId}'
+      };
+
+      vi.mocked(requestUrl).mockResolvedValue({ status: 200 } as any);
+
+      await plugin.registerMapping();
+
+      expect(requestUrl).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          userId: 'test-user',
+          vaultId: 'test-vault',
+        }),
+      }));
+      expect(initialize).toHaveBeenCalled();
+      expect(forceRegisterPublicKey).toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith('LINE UserIDとVault IDのマッピングとE2EE公開鍵を登録しました。');
+    });
+
+    it('公開鍵登録に失敗した場合はマッピング成功だけを成功扱いしない', async () => {
+      const initialize = vi.fn().mockResolvedValue(undefined);
+      const loadKeys = vi.fn().mockResolvedValue({ keyId: 'key-1' });
+      const forceRegisterPublicKey = vi.fn().mockRejectedValue(new Error('key registration failed'));
+
+      plugin.keyManager = {
+        initialize,
+        loadKeys,
+        forceRegisterPublicKey
+      } as any;
+
+      plugin.settings = {
+        noteFolderPath: 'LINE',
+        vaultId: 'test-vault',
+        lineUserId: 'test-user',
+        autoSync: false,
+        syncInterval: 1,
+        syncOnStartup: false,
+        organizeByDate: false,
+        fileNameTemplate: '{date}-{messageId}',
+        e2eeEnabled: true,
+        groupMessagesByDate: false,
+        groupedMessageTemplate: '{time}: {text}',
+        groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
+        groupedFileNameTemplate: '{date}',
+        syncImages: true,
+        imageFolderPath: 'LINE/images',
+        imageFileNameTemplate: '{date}-{messageId}'
+      };
+
+      vi.mocked(requestUrl).mockResolvedValue({ status: 200 } as any);
+
+      await plugin.registerMapping();
+
+      expect(forceRegisterPublicKey).toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith('マッピングは登録されましたが、E2EE公開鍵の登録に失敗しました: key registration failed');
+      expect(Notice).not.toHaveBeenCalledWith('LINE UserIDとVault IDのマッピングとE2EE公開鍵を登録しました。');
     });
   });
 });
