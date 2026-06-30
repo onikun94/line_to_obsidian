@@ -1,2 +1,9 @@
 packages:
-  - 'packages/*' 
+  - 'packages/*'
+overrides:
+  esbuild: 0.28.1
+  picomatch: 4.0.4
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

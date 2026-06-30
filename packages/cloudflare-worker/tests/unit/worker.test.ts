@@ -18,12 +18,6 @@ vi.mock('hono/cors', () => ({
   cors: vi.fn(() => vi.fn()),
 }));
 
-// LINE Bot SDKのモック
-vi.mock('@line/bot-sdk', () => ({
-  validateSignature: vi.fn(),
-  Client: vi.fn(),
-}));
-
 describe('Cloudflare Worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -431,4 +425,4 @@ describe('Cloudflare Worker', () => {
       expect(mockContext.json).toHaveBeenCalledWith({ status: 'ok', updated: 1 });
     });
   });
-}); 
+});

@@ -1,6 +1,28 @@
+import { Platform } from 'obsidian';
+
 export class CryptoUtils {
   private static encoder = new TextEncoder();
   private static decoder = new TextDecoder();
+
+  private static bytesToBase64(bytes: Uint8Array): string {
+    return Buffer.from(bytes).toString('base64');
+  }
+
+  private static base64ToBytes(base64: string): Uint8Array {
+    return new Uint8Array(Buffer.from(base64, 'base64'));
+  }
+
+  private static getPlatformFingerprint(): string {
+    const parts: string[] = [];
+    if (Platform.isMacOS) parts.push('macos');
+    if (Platform.isWin) parts.push('win');
+    if (Platform.isLinux) parts.push('linux');
+    if (Platform.isIosApp) parts.push('ios');
+    if (Platform.isAndroidApp) parts.push('android');
+    if (Platform.isMobileApp) parts.push('mobile');
+    if (Platform.isDesktopApp) parts.push('desktop');
+    return parts.join('-') || 'unknown';
+  }
 
   /**
    * RSA鍵ペアを生成
@@ -37,8 +59,7 @@ export class CryptoUtils {
    */
   static async exportPublicKey(publicKey: CryptoKey): Promise<string> {
     const exported = await crypto.subtle.exportKey('spki', publicKey);
-    const exportedAsString = String.fromCharCode.apply(null, Array.from(new Uint8Array(exported)));
-    const exportedAsBase64 = btoa(exportedAsString);
+    const exportedAsBase64 = this.bytesToBase64(new Uint8Array(exported));
     return `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64.match(/.{1,64}/g)?.join('\n')}\n-----END PUBLIC KEY-----`;
   }
 
@@ -47,8 +68,7 @@ export class CryptoUtils {
    */
   static async exportPrivateKey(privateKey: CryptoKey): Promise<string> {
     const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
-    const exportedAsString = String.fromCharCode.apply(null, Array.from(new Uint8Array(exported)));
-    const exportedAsBase64 = btoa(exportedAsString);
+    const exportedAsBase64 = this.bytesToBase64(new Uint8Array(exported));
     return `-----BEGIN PRIVATE KEY-----\n${exportedAsBase64.match(/.{1,64}/g)?.join('\n')}\n-----END PRIVATE KEY-----`;
   }
 
@@ -59,8 +79,7 @@ export class CryptoUtils {
     const pemHeader = '-----BEGIN PUBLIC KEY-----';
     const pemFooter = '-----END PUBLIC KEY-----';
     const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length).replace(/\s/g, '');
-    const binaryDerString = atob(pemContents);
-    const binaryDer = new Uint8Array(Array.from(binaryDerString, char => char.charCodeAt(0)));
+    const binaryDer = this.base64ToBytes(pemContents);
 
     return await crypto.subtle.importKey(
       'spki',
@@ -81,8 +100,7 @@ export class CryptoUtils {
     const pemHeader = '-----BEGIN PRIVATE KEY-----';
     const pemFooter = '-----END PRIVATE KEY-----';
     const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length).replace(/\s/g, '');
-    const binaryDerString = atob(pemContents);
-    const binaryDer = new Uint8Array(Array.from(binaryDerString, char => char.charCodeAt(0)));
+    const binaryDer = this.base64ToBytes(pemContents);
 
     return await crypto.subtle.importKey(
       'pkcs8',
@@ -190,24 +208,16 @@ export class CryptoUtils {
   /**
    * ArrayBufferをBase64文字列に変換
    */
-  static arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+  static arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    return this.bytesToBase64(bytes);
   }
 
   /**
    * Base64文字列をArrayBufferに変換
    */
   static base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
+    const bytes = this.base64ToBytes(base64);
     // ArrayBufferを正しく返す
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   }
@@ -217,14 +227,13 @@ export class CryptoUtils {
    */
   static async generateDeviceId(): Promise<string> {
     const fingerprint = {
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      platform: navigator.platform,
-      hardwareConcurrency: navigator.hardwareConcurrency,
+      platform: this.getPlatformFingerprint(),
+      isMobile: Platform.isMobile,
+      isDesktop: Platform.isDesktop,
       timestamp: Date.now(),
       random: crypto.getRandomValues(new Uint8Array(16))
     };
-    
+
     const data = this.encoder.encode(JSON.stringify(fingerprint));
     const hash = await crypto.subtle.digest('SHA-256', data);
     return this.arrayBufferToBase64(hash);

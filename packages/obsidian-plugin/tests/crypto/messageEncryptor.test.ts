@@ -61,10 +61,7 @@ describe('MessageEncryptor', () => {
       expect(encrypted.encryptedContent).toBeDefined();
     });
 
-    it('should handle version mismatch with warning', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+    it('should reject unsupported message versions', async () => {
       const message = 'test';
       const encrypted = await messageEncryptor.encryptMessage(message, 'user123');
       encrypted.version = '2.0';
@@ -77,9 +74,6 @@ describe('MessageEncryptor', () => {
       const processed = await messageEncryptor.processMessage(messageWithEncrypted);
 
       expect(processed).toBe('[メッセージを読み込めませんでした]');
-      
-      consoleWarnSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -139,14 +133,10 @@ describe('MessageEncryptor', () => {
     });
 
     it('should handle unknown message formats', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
       const unknownFormat = { foo: 'bar', baz: 123 };
       const processed = await messageEncryptor.processMessage(unknownFormat);
 
       expect(processed).toBe(JSON.stringify(unknownFormat));
-      
-      consoleWarnSpy.mockRestore();
     });
   });
 

@@ -54,10 +54,7 @@ export class MessageEncryptor {
         timestamp: Date.now(),
         version: this.VERSION
       };
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Encryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to encrypt message');
     }
   }
@@ -68,9 +65,7 @@ export class MessageEncryptor {
   async decryptMessage(encryptedMessage: EncryptedMessage): Promise<string> {
     try {
       if (encryptedMessage.version !== this.VERSION) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`Message version mismatch: expected ${this.VERSION}, got ${encryptedMessage.version}`);
-        }
+        throw new Error(`Unsupported message version: ${encryptedMessage.version}`);
       }
       
       const keyPair = this.keyManager.getKeyPair();
@@ -84,10 +79,7 @@ export class MessageEncryptor {
       const decrypted = await CryptoUtils.decryptMessage(encryptedContent, aesKey, iv);
       
       return decrypted;
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Decryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to decrypt message');
     }
   }
@@ -95,57 +87,60 @@ export class MessageEncryptor {
   /**
    * Type guard for encrypted messages
    */
-  isEncryptedMessage(message: any): message is EncryptedMessage {
-    return message &&
-      typeof message === 'object' &&
-      typeof message.encryptedContent === 'string' &&
-      typeof message.encryptedAESKey === 'string' &&
-      typeof message.iv === 'string' &&
-      typeof message.version === 'string';
+  isEncryptedMessage(message: unknown): message is EncryptedMessage {
+    if (!message || typeof message !== 'object') return false;
+    const m = message as Record<string, unknown>;
+    return typeof m.encryptedContent === 'string' &&
+      typeof m.encryptedAESKey === 'string' &&
+      typeof m.iv === 'string' &&
+      typeof m.version === 'string';
   }
 
   /**
    * Checks for legacy message format compatibility
    */
-  isLegacyMessage(message: any): boolean {
-    return message &&
-      typeof message === 'object' &&
-      typeof message.text === 'string' &&
-      !this.isEncryptedMessage(message);
+  isLegacyMessage(message: unknown): message is { text: string } {
+    if (!message || typeof message !== 'object') return false;
+    const m = message as Record<string, unknown>;
+    return typeof m.text === 'string' && !this.isEncryptedMessage(message);
   }
 
   /**
    * Processes messages transparently regardless of format
    */
-  async processMessage(message: any): Promise<string> {
-    if (message.encrypted === true && message.encryptedContent) {
-      try {
-        const encryptedMessage: EncryptedMessage = {
-          encryptedContent: message.encryptedContent,
-          encryptedAESKey: message.encryptedAESKey || message.encryptedAesKey,
-          iv: message.iv,
-          senderKeyId: message.senderKeyId,
-          recipientUserId: message.recipientUserId,
-          timestamp: message.timestamp,
-          version: message.version || '1.0'
-        };
-        return await this.decryptMessage(encryptedMessage);
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to decrypt message:', error);
-        }
-        return '[メッセージを読み込めませんでした]';
-      }
-    } else if (this.isLegacyMessage(message)) {
-      return message.text;
-    } else if (typeof message === 'string') {
+  async processMessage(message: unknown): Promise<string> {
+    if (typeof message === 'string') {
       return message;
-    } else {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Unknown message format:', message);
-      }
+    }
+
+    if (!message || typeof message !== 'object') {
       return JSON.stringify(message);
     }
+
+    const m = message as Record<string, unknown>;
+
+    if (m.encrypted === true && typeof m.encryptedContent === 'string') {
+      try {
+        const encryptedMessage: EncryptedMessage = {
+          encryptedContent: m.encryptedContent,
+          encryptedAESKey: String(m.encryptedAESKey ?? m.encryptedAesKey ?? ''),
+          iv: String(m.iv ?? ''),
+          senderKeyId: String(m.senderKeyId ?? ''),
+          recipientUserId: String(m.recipientUserId ?? ''),
+          timestamp: typeof m.timestamp === 'number' ? m.timestamp : Date.now(),
+          version: typeof m.version === 'string' ? m.version : '1.0'
+        };
+        return await this.decryptMessage(encryptedMessage);
+      } catch {
+        return '[メッセージを読み込めませんでした]';
+      }
+    }
+
+    if (this.isLegacyMessage(message)) {
+      return message.text;
+    }
+
+    return JSON.stringify(message);
   }
 
   /**
@@ -228,10 +223,7 @@ export class MessageEncryptor {
       );
 
       return decryptedData;
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Image decryption failed:', error);
-      }
+    } catch {
       throw new Error('Failed to decrypt image');
     }
   }
