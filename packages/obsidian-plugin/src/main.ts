@@ -821,11 +821,35 @@ export default class LinePlugin extends Plugin {
     }
   }
 
+  private async registerCurrentPublicKey(): Promise<void> {
+    try {
+      await this.keyManager.initialize();
+    } catch (error) {
+      const keys = await this.keyManager.loadKeys();
+      if (!keys) {
+        throw error;
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Key initialization reported an error, retrying public key registration with existing keys:', error);
+      }
+    }
+
+    await this.keyManager.forceRegisterPublicKey();
+  }
+
   async registerMapping() {
-    if (!this.settings.lineUserId || !this.settings.vaultId) {
+    const lineUserId = this.settings.lineUserId.trim();
+    const vaultId = this.settings.vaultId.trim();
+
+    if (!lineUserId || !vaultId) {
       new Notice('LINE UserIDとVault IDの両方を設定してください。');
       return;
     }
+
+    this.settings.lineUserId = lineUserId;
+    this.settings.vaultId = vaultId;
+    await this.saveSettings();
 
     try {
       const response = await requestUrl({
@@ -835,8 +859,8 @@ export default class LinePlugin extends Plugin {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: this.settings.lineUserId,
-          vaultId: this.settings.vaultId,
+          userId: lineUserId,
+          vaultId: vaultId,
         }),
       });
 
@@ -845,14 +869,16 @@ export default class LinePlugin extends Plugin {
       }
 
       try {
-        await this.keyManager.initialize();
+        await this.registerCurrentPublicKey();
       } catch (keyError) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to initialize keys after mapping:', keyError);
+          console.error('Failed to register public key after mapping:', keyError);
         }
+        new Notice(`マッピングは登録されましたが、E2EE公開鍵の登録に失敗しました: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`);
+        return;
       }
 
-      new Notice('LINE UserIDとVault IDのマッピングを登録しました。');
+      new Notice('LINE UserIDとVault IDのマッピングとE2EE公開鍵を登録しました。');
     } catch (error) {
       new Notice(`マッピングの登録に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -1286,12 +1312,16 @@ class LineSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Register mapping')
-      .setDesc('LINE UserIDとVault IDのマッピングを登録します')
+      .setDesc('LINE UserIDとVault IDのマッピングとE2EE公開鍵を登録します。メッセージを読み込めない場合もこの操作で接続を修復できます')
       .addButton(button => button
         .setButtonText('Register')
         .onClick(async () => {
           await this.plugin.registerMapping();
         }));
+
+    new Setting(containerEl)
+      .setHeading()
+      .setName('詳細設定');
 
     new Setting(containerEl)
       .setName('Reset mapping')

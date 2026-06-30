@@ -276,5 +276,13 @@ export class KeyManager {
     }
 
     await this.registerPublicKey(keys);
+
+    const data = await this.plugin.loadData();
+    if (data) {
+      delete data.pendingKeyRegistration;
+      delete data.registrationFailureCount;
+      delete data.lastRegistrationAttempt;
+      await this.plugin.saveData(data);
+    }
   }
 }
