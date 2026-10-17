@@ -102,7 +102,7 @@ interface LineWebhookEvent {
   };
   message?: {
     id: string;
-    type: 'text' | 'image' | 'audio' | string;
+    type: string;
     text?: string;
   };
   postback?: {
@@ -179,6 +179,7 @@ async function callLineMessageApi(
   endpoint: 'reply' | 'push',
   payload: unknown
 ): Promise<void> {
+  // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
   const response = await fetch(`https://api.line.me/v2/bot/message/${endpoint}`, {
     method: 'POST',
     headers: {
@@ -495,9 +496,9 @@ async function buildTextMessage(
 
     const encoder = new TextEncoder();
     const encryptedContent = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+      { name: 'AES-GCM', iv: iv.buffer },
       aesKey,
-      encoder.encode(text).buffer as ArrayBuffer
+      encoder.encode(text)
     );
 
     const publicKeyBase64 = pemToBase64(publicKeyData.publicKey);
@@ -802,6 +803,7 @@ app.post('/webhook', async (c: Context) => {
 
         try {
           // Fetch image from LINE Content API
+          // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
           const contentResponse = await fetch(
             `https://api-data.line.me/v2/bot/message/${event.message.id}/content`,
             {
@@ -851,7 +853,7 @@ app.post('/webhook', async (c: Context) => {
 
               // Encrypt image data
               const encryptedContent = await crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+                { name: 'AES-GCM', iv: iv.buffer },
                 aesKey,
                 imageData
               );
@@ -1033,6 +1035,7 @@ app.post('/webhook', async (c: Context) => {
 
         try {
           // Fetch audio from LINE Content API
+          // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
           const contentResponse = await fetch(
             `https://api-data.line.me/v2/bot/message/${event.message.id}/content`,
             {

@@ -15,6 +15,16 @@ cd obsidian-line
 pnpm install
 ```
 
+Use the pnpm version declared in `package.json` (9.12.1). Run `pnpm lint`,
+`pnpm test:run`, and `pnpm build` before opening a pull request. ESLint applies
+Obsidian-specific rules only to the plugin; Cloudflare Workers use the standard
+`fetch` API.
+
+`pnpm build` writes `main.js` and `styles.css` to the repository root beside
+`manifest.json`. The public production API URL is built in, so a clean checkout
+does not need secrets to reproduce the release. Set `OBSIDIAN_LINE_API_URL`
+only when targeting a different server. Release builds must use the default URL.
+
 3. 開発用ビルドを開始します
 ```bash
 pnpm dev
@@ -37,4 +47,4 @@ pnpm dev
 
 ## 質問や提案
 
-質問や提案がある場合は、Issueを作成してください。 
+質問や提案がある場合は、Issueを作成してください。

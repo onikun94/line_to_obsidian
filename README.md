@@ -59,6 +59,8 @@ You usually don't need to type these: the bot's replies come with tappable butto
 
 ### 1. Install Obsidian Plugin
 
+Requires Obsidian 1.4.0 or later. Settings search is supported on Obsidian 1.13.0 or later.
+
 1. Open Obsidian settings
 2. Third-party plugins → Community plugins → Browse
 3. Search for "LINE Notes Sync"

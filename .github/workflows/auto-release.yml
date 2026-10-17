@@ -38,7 +38,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Configure Git user
         run: |
@@ -75,7 +75,6 @@ jobs:
 
       - name: Build plugin
         env:
-          OBSIDIAN_LINE_API_URL: ${{ secrets.OBSIDIAN_LINE_API_URL }}
           NODE_ENV: production
         run: pnpm --filter obsidian-plugin build
 
@@ -83,8 +82,8 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            packages/obsidian-plugin/main.js
-            packages/obsidian-plugin/styles.css
+            main.js
+            styles.css
             manifest.json
 
       - name: Push changes
@@ -103,8 +102,8 @@ jobs:
           gh release create "${{ steps.version_update.outputs.new_version }}" \
             --title="${{ steps.version_update.outputs.new_version }}" \
             --generate-notes \
-            packages/obsidian-plugin/main.js \
-            packages/obsidian-plugin/styles.css \
+            main.js \
+            styles.css \
             manifest.json
 
       - name: Release completion notification

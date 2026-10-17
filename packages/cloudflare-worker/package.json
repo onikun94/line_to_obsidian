@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "hono": "^4.12.25"
+    "hono": "4.13.13"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260625.1",

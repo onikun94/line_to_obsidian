@@ -110,6 +110,7 @@ export const normalizePath = vi.fn((path: string) => path);
 
 // requestUrl 関数のモック
 export const requestUrl = vi.fn();
+export const requireApiVersion = vi.fn().mockReturnValue(true);
 
 // App インターフェースのモック
 export const mockApp = {

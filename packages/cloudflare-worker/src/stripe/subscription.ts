@@ -12,7 +12,7 @@ export async function getSubscription(
   kv: KVNamespace,
   lineUserId: string
 ): Promise<SubscriptionData> {
-  const data = await kv.get(lineUserId, 'json') as SubscriptionData | null;
+  const data = await kv.get<SubscriptionData>(lineUserId, 'json');
 
   if (!data) {
     // Return default free subscription (don't save yet)
@@ -130,7 +130,7 @@ async function incrementUsageCount(
     const expectedUpdatedAt = subscription.updatedAt;
 
     // Re-read to check for concurrent modification
-    const current = await kv.get(lineUserId, 'json') as SubscriptionData | null;
+    const current = await kv.get<SubscriptionData>(lineUserId, 'json');
 
     // If no data exists yet, create it
     if (!current) {
@@ -263,7 +263,7 @@ export async function findUserByCustomerId(
       continue;
     }
 
-    const data = await kv.get(key.name, 'json') as SubscriptionData | null;
+    const data = await kv.get<SubscriptionData>(key.name, 'json');
     if (data && data.stripeCustomerId === customerId) {
       // Create the reverse index for future lookups
       await saveCustomerIndex(kv, customerId, key.name);
