@@ -126,6 +126,9 @@ Example: `{date}_{time}_LINE` → `2024-01-15_14-30-45_LINE.md`
 
 If you encounter any issues, please report them on [GitHub Issues](https://github.com/onikun94/line_to_obsidian/issues).
 
+You can support development through [Buy Me a Coffee](https://buymeacoffee.com/shotovim).
+Contributions are optional and do not include a Premium subscription.
+
 ## License
 
 MIT
