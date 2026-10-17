@@ -179,7 +179,6 @@ async function callLineMessageApi(
   endpoint: 'reply' | 'push',
   payload: unknown
 ): Promise<void> {
-  // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
   const response = await fetch(`https://api.line.me/v2/bot/message/${endpoint}`, {
     method: 'POST',
     headers: {
@@ -803,7 +802,6 @@ app.post('/webhook', async (c: Context) => {
 
         try {
           // Fetch image from LINE Content API
-          // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
           const contentResponse = await fetch(
             `https://api-data.line.me/v2/bot/message/${event.message.id}/content`,
             {
@@ -1035,7 +1033,6 @@ app.post('/webhook', async (c: Context) => {
 
         try {
           // Fetch audio from LINE Content API
-          // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
           const contentResponse = await fetch(
             `https://api-data.line.me/v2/bot/message/${event.message.id}/content`,
             {
