@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "lint": "eslint packages/*/src --max-warnings 0",
+    "lint:review": "eslint --config eslint.review.config.mjs packages/*/src",
     "build": "pnpm --filter obsidian-plugin build",
     "dev": "pnpm --filter obsidian-plugin dev",
     "deploy": "pnpm --filter cloudflare-worker deploy",

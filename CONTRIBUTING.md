@@ -15,10 +15,15 @@ cd obsidian-line
 pnpm install
 ```
 
-Use the pnpm version declared in `package.json` (9.12.1). Run `pnpm lint`,
-`pnpm test:run`, and `pnpm build` before opening a pull request. ESLint applies
-Obsidian-specific rules only to the plugin; Cloudflare Workers use the standard
+Use the pnpm version declared in `package.json` (9.12.1). Run `pnpm lint`, `pnpm lint:review`,
+`pnpm test:run`, and `pnpm build` before opening a pull request. `pnpm lint` applies
+Obsidian-specific runtime rules only to the plugin; Cloudflare Workers use the standard
 `fetch` API.
+
+The review check uses the official Obsidian preset and documented scanner severity
+levels. Forbidden ESLint suppression comments fail CI. Before publishing, also
+check **Review branch** in the community developer dashboard; see
+[scorecard checks](docs/scorecard.md).
 
 `pnpm build` writes `main.js` and `styles.css` to the repository root beside
 `manifest.json`. The public production API URL is built in, so a clean checkout
