@@ -2,18 +2,20 @@ import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
 import dotenv from 'dotenv';
+import { copyFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const isProd = process.env.NODE_ENV === 'production';
+const prod = process.argv[2] === 'production';
 const isCI = process.env.CI === 'true';
+const pluginDir = fileURLToPath(new URL('.', import.meta.url));
+const rootDir = fileURLToPath(new URL('../../', import.meta.url));
 
 if (!isCI && !process.env.OBSIDIAN_LINE_API_URL) {
   dotenv.config({ path: '.env.local' });
 }
 
-if (isProd && !process.env.OBSIDIAN_LINE_API_URL) {
-  console.warn('\x1b[33m%s\x1b[0m', `警告: 本番環境でOBSIDIAN_LINE_API_URLが設定されていません。
-GitHub Actionsの環境変数でOBSIDIAN_LINE_API_URLを設定してください。`);
-}
+// 公開エンドポイントを既定値にして、秘密の環境変数なしでリリースを再現できるようにする。
+const apiUrl = process.env.OBSIDIAN_LINE_API_URL || 'https://line-to-obsidian.line-to-obsidian.workers.dev';
 
 const banner =
 `/*
@@ -22,17 +24,19 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
-const prod = (process.argv[2] === "production");
-
+copyFileSync(new URL('styles.css', import.meta.url), new URL('../../styles.css', import.meta.url));
 
 const context = await esbuild.context({
+  absWorkingDir: pluginDir,
   banner: {
     js: banner,
   },
   entryPoints: ["src/main.ts"],
   bundle: true,
   define: {
-    'process.env.OBSIDIAN_LINE_API_URL': JSON.stringify(process.env.OBSIDIAN_LINE_API_URL ?? '')
+    'process.env.OBSIDIAN_LINE_API_URL': JSON.stringify(apiUrl),
+    'process.env.NODE_ENV': JSON.stringify(prod ? 'production' : 'development'),
+    'process.env.PAYMENT_PAGE_URL': JSON.stringify(process.env.PAYMENT_PAGE_URL || 'https://line-notes-sync.pages.dev')
   },
   external: [
     "obsidian",
@@ -64,13 +68,13 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: 'main.js', 
+  outfile: rootDir + 'main.js',
   platform: 'node'
 });
 
 if (prod) {
   await context.rebuild();
-  process.exit(0);
+  await context.dispose();
 } else {
   await context.watch();
 }

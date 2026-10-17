@@ -30,14 +30,18 @@ jobs:
       
       - name: TypeScript type check - Obsidian Plugin
         run: pnpm --filter obsidian-plugin exec tsc --noEmit --skipLibCheck
+
+      - name: Check scorecard rules
+        run: pnpm lint
       
       - name: TypeScript type check - CloudFlare Worker
         run: pnpm --filter cloudflare-worker exec tsc --noEmit --skipLibCheck
       
       - name: Build Obsidian Plugin
         run: pnpm --filter obsidian-plugin build
-        env:
-          OBSIDIAN_LINE_API_URL: "https://example.com/api"
+
+      - name: Verify release asset layout
+        run: test -s main.js && test -s styles.css && test -s manifest.json
       
       - name: Build CloudFlare Worker  
         run: pnpm --filter cloudflare-worker build

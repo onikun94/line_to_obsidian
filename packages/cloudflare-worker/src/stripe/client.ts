@@ -22,6 +22,7 @@ export async function createCheckoutSession(params: {
     'allow_promotion_codes': 'true',
   });
 
+  // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
   const response = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
     method: 'POST',
     headers: {
@@ -32,7 +33,7 @@ export async function createCheckoutSession(params: {
   });
 
   if (!response.ok) {
-    const error = await response.json() as { error?: { message?: string } };
+    const error: { error?: { message?: string } } = await response.json();
     throw new Error(`Stripe API error: ${error.error?.message || response.statusText}`);
   }
 
@@ -52,6 +53,7 @@ export async function createPortalSession(params: {
     'return_url': params.returnUrl,
   });
 
+  // eslint-disable-next-line no-restricted-globals -- Cloudflare Workersの通信には標準fetchを使う。
   const response = await fetch(`${STRIPE_API_BASE}/billing_portal/sessions`, {
     method: 'POST',
     headers: {
@@ -62,7 +64,7 @@ export async function createPortalSession(params: {
   });
 
   if (!response.ok) {
-    const error = await response.json() as { error?: { message?: string } };
+    const error: { error?: { message?: string } } = await response.json();
     throw new Error(`Stripe API error: ${error.error?.message || response.statusText}`);
   }
 

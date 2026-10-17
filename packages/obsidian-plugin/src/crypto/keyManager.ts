@@ -1,5 +1,5 @@
 import { CryptoUtils } from './cryptoUtils';
-import { Plugin } from 'obsidian';
+import { Plugin, requestUrl } from 'obsidian';
 import { API_ENDPOINTS } from '../constants';
 
 export interface EncryptionKeys {
@@ -176,8 +176,6 @@ export class KeyManager {
     const settings = await this.plugin.loadData();
 
     try {
-      const { requestUrl } = require('obsidian');
-
       const response = await requestUrl({
         url: API_ENDPOINTS.REGISTER_PUBLIC_KEY,
         method: 'POST',
@@ -214,7 +212,6 @@ export class KeyManager {
     }
 
     const settings = await this.plugin.loadData();
-    const { requestUrl } = require('obsidian');
     const response = await requestUrl({
       url: API_ENDPOINTS.GET_PUBLIC_KEY(userId),
       method: 'GET',

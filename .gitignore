@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs
 main.js
+/styles.css
 *.js.map
 
 # Environment files
