@@ -110,6 +110,11 @@ describe('sync index', () => {
     await getPendingMessages(kv, prefix);
     expect(calls.list).toHaveBeenCalledTimes(2);
   });
+  it('does not fail receipt when the activity hint hits a KV write limit', async () => {
+    const { kv, calls } = mockKV();
+    calls.put.mockRejectedValueOnce(new Error('same-key write rate exceeded'));
+    await expect(recordSyncActivity(kv, prefix, key, 86400)).resolves.toBeUndefined();
+  });
   it('delivers messages even when the optional index write fails', async () => {
     const { kv, values, calls } = mockKV();
     values.set(key, JSON.stringify({ synced: false }));

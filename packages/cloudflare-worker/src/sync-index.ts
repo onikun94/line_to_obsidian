@@ -19,9 +19,16 @@ function activityKey(prefix: string): string {
 export async function recordSyncActivity(
   kv: KVNamespace, prefix: string, key: string, expirationTtl: number,
 ): Promise<void> {
-  await kv.put(activityKey(prefix), JSON.stringify({
-    revision: crypto.randomUUID(), key,
-  } satisfies Activity), { expirationTtl });
+  try {
+    await kv.put(activityKey(prefix), JSON.stringify({
+      revision: crypto.randomUUID(), key,
+    } satisfies Activity), { expirationTtl });
+  } catch {
+    // The payload has already been saved. A quota/rate limit on this optional
+    // hint must not abort the webhook or skip the existing quota accounting.
+    // The bounded index lifetime provides recovery if the hint cannot be saved.
+    console.warn('Unable to record sync activity; reconciliation will recover it');
+  }
 }
 
 /** Keep the existing array response, including support for unmodified clients. */
