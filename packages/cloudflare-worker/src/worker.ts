@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 import { Hono } from 'hono';
 import { cors } from 'hono/cors'
+import { getPendingMessages, recordSyncActivity } from './sync-index';
 import type { Context } from 'hono';
 import { createCheckoutSession, createPortalSession, verifyWebhookSignature } from './stripe/client';
 import {
@@ -252,20 +253,10 @@ app.get('/messages/:vaultId/:userId', async (c: Context) => {
       return c.json({ error: 'Unauthorized access' }, 403);
     }
 
-    const messages: LineMessage[] = [];
-    const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `${vaultId}/${userId}/` });
+    const messages = await getPendingMessages<LineMessage>(
+      c.env.LINE_MESSAGES, `${vaultId}/${userId}/`,
+    );
 
-    for (const key of keys) {
-      try {
-        const message = await c.env.LINE_MESSAGES.get(key.name, 'json');
-        if (message) {
-          messages.push(message as LineMessage);
-        }
-      } catch (err) {
-        console.error(`Error fetching message ${key.name}:`, err);
-      }
-    }
-    
     return c.json(messages);
   } catch (err) {
     console.error('Error in /messages/:vaultId/:userId:', err);
@@ -747,6 +738,10 @@ app.post('/webhook', async (c: Context) => {
           JSON.stringify(message),
           { expirationTtl: TEXT_EXPIRATION_TTL }
         );
+        await recordSyncActivity(
+          c.env.LINE_MESSAGES, `${vaultId}/${userId}/`,
+          `${vaultId}/${userId}/${event.message.id}`, TEXT_EXPIRATION_TTL,
+        );
       }
 
       // Handle image messages
@@ -956,6 +951,10 @@ app.post('/webhook', async (c: Context) => {
             JSON.stringify(imageMessage),
             { expirationTtl: IMAGE_EXPIRATION_TTL }
           );
+          await recordSyncActivity(
+            c.env.LINE_MESSAGES, `image/${vaultId}/${userId}/`,
+            `image/${vaultId}/${userId}/${event.message.id}`, IMAGE_EXPIRATION_TTL,
+          );
 
           // ===== Increment image count and notify if needed =====
           const newCount = await incrementImageCount(c.env.LINE_SUBSCRIPTIONS, userId);
@@ -1103,6 +1102,10 @@ app.post('/webhook', async (c: Context) => {
             JSON.stringify(message),
             { expirationTtl: TEXT_EXPIRATION_TTL }
           );
+          await recordSyncActivity(
+            c.env.LINE_MESSAGES, `${vaultId}/${userId}/`,
+            `${vaultId}/${userId}/${event.message.id}`, TEXT_EXPIRATION_TTL,
+          );
 
           const newCount = await incrementVoiceCount(c.env.LINE_SUBSCRIPTIONS, userId);
 
@@ -1239,19 +1242,9 @@ app.get('/images/:vaultId/:userId', async (c: Context) => {
       return c.json({ error: 'Unauthorized access' }, 403);
     }
 
-    const images: ImageMessage[] = [];
-    const { keys } = await c.env.LINE_MESSAGES.list({ prefix: `image/${vaultId}/${userId}/` });
-
-    for (const key of keys) {
-      try {
-        const image = await c.env.LINE_MESSAGES.get(key.name, 'json');
-        if (image) {
-          images.push(image as ImageMessage);
-        }
-      } catch (err) {
-        console.error(`Error fetching image metadata ${key.name}:`, err);
-      }
-    }
+    const images = await getPendingMessages<ImageMessage>(
+      c.env.LINE_MESSAGES, `image/${vaultId}/${userId}/`,
+    );
 
     return c.json(images);
   } catch (err) {

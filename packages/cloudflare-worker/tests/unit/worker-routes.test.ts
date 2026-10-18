@@ -160,6 +160,46 @@ describe('Worker routes (実アプリ)', () => {
     }, env as any);
   }
 
+  describe('新着時だけKV一覧を再取得する同期', () => {
+    it.each(['text', 'image', 'audio'])('%s受信で新着を検知し、再試行・同期完了後にはlistしない', async type => {
+      mappingsKV._store.set(USER_ID, VAULT_ID);
+      aiRun.mockResolvedValue({ text: 'transcript' });
+      const route = type === 'image' ? 'images' : 'messages';
+      const path = `/${route}/${VAULT_ID}/${USER_ID}`;
+      const get = () => app.request(path, {}, env as any);
+      expect(await (await get()).json()).toEqual([]);
+      expect(await (await get()).json()).toEqual([]);
+      expect(messagesKV.list).toHaveBeenCalledTimes(1);
+      const received = await postWebhook([{
+        type: 'message', timestamp: Date.now(), replyToken: 'test-reply',
+        source: { userId: USER_ID },
+        message: { id: 'new-message', type, text: 'hello' },
+      }]);
+      expect(received.status).toBe(200);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await get();
+        expect(result.status).toBe(200);
+        expect(await result.json()).toEqual([expect.objectContaining({ messageId: 'new-message', synced: false })]);
+      }
+      expect(messagesKV.list).toHaveBeenCalledTimes(2);
+      const acknowledged = await app.request(`/${route}/update-sync-status`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vaultId: VAULT_ID, userId: USER_ID, messageIds: ['new-message'] }),
+      }, env as any);
+      expect(acknowledged.status).toBe(200);
+      expect(await (await get()).json()).toEqual([]);
+      expect(await (await get()).json()).toEqual([]);
+      expect(messagesKV.list).toHaveBeenCalledTimes(2);
+    });
+    it('認証失敗では一覧もキャッシュも読み出さない', async () => {
+      mappingsKV._store.set(USER_ID, 'different-vault');
+      const result = await app.request(`/messages/${VAULT_ID}/${USER_ID}`, {}, env as any);
+      expect(result.status).toBe(403);
+      expect(messagesKV.get).not.toHaveBeenCalled();
+      expect(messagesKV.list).not.toHaveBeenCalled();
+    });
+  });
+
   describe('画像同期完了時のR2削除', () => {
     it('同期済みにした画像のR2オブジェクトを削除する', async () => {
       mappingsKV._store.set(USER_ID, VAULT_ID);
