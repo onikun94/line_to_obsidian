@@ -19,6 +19,15 @@ kv_namespaces = [
 # - STRIPE_PRICE_ID
 # - PAYMENT_PAGE_URL
 
+# Persistent per-account sync cooldown; no Workers KV operations.
+[[durable_objects.bindings]]
+name = "SYNC_RATE_LIMITER"
+class_name = "SyncRateLimiter"
+
+[[migrations]]
+tag = "v1-sync-rate-limiter"
+new_sqlite_classes = ["SyncRateLimiter"]
+
 # R2 bucket for image storage
 [[r2_buckets]]
 binding = "LINE_IMAGES"
@@ -57,3 +66,7 @@ preview_bucket_name = "line-images-dev"
 
 [env.development.ai]
 binding = "AI"
+
+[[env.development.durable_objects.bindings]]
+name = "SYNC_RATE_LIMITER"
+class_name = "SyncRateLimiter"

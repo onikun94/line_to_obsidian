@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import app from '../../src/worker';
+import { createSyncRateLimiterNamespace } from '../sync-rate-limit-helper';
 
 // 実際のHonoアプリにリクエストを通すルートレベルテスト。
 // LINE署名・Stripe署名は実物と同じアルゴリズムで生成して検証を通す。
@@ -90,6 +91,7 @@ function lineApiCalls(kind: 'reply' | 'push'): { url: string; body: any }[] {
 }
 
 describe('Worker routes (実アプリ)', () => {
+  afterEach(() => vi.restoreAllMocks());
   let env: Record<string, unknown>;
   let messagesKV: ReturnType<typeof createMockKV>;
   let mappingsKV: ReturnType<typeof createMockKV>;
@@ -109,6 +111,7 @@ describe('Worker routes (実アプリ)', () => {
     aiRun = vi.fn();
 
     env = {
+      SYNC_RATE_LIMITER: createSyncRateLimiterNamespace(),
       LINE_CHANNEL_ACCESS_TOKEN: 'test-access-token',
       LINE_CHANNEL_SECRET,
       LINE_MESSAGES: messagesKV,
@@ -166,7 +169,12 @@ describe('Worker routes (実アプリ)', () => {
       aiRun.mockResolvedValue({ text: 'transcript' });
       const route = type === 'image' ? 'images' : 'messages';
       const path = `/${route}/${VAULT_ID}/${USER_ID}`;
-      const get = () => app.request(path, {}, env as any);
+      let now = Date.now();
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const get = () => {
+        now += 5 * 60 * 1000;
+        return app.request(path, {}, env as any);
+      };
       expect(await (await get()).json()).toEqual([]);
       expect(await (await get()).json()).toEqual([]);
       expect(messagesKV.list).toHaveBeenCalledTimes(1);
