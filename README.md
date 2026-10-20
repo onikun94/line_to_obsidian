@@ -103,6 +103,18 @@ Requires Obsidian 1.4.0 or later. Settings search is supported on Obsidian 1.13.
 - Configure sync interval (1-5 hours)
 - Enable sync on startup for immediate updates when opening Obsidian
 
+For accounts explicitly listed in the `SYNC_RATE_LIMIT_ACCOUNTS` Worker secret
+(comma-separated LINE user IDs), the server allows one request every five minutes
+for each of the message list, image list, and subscription status APIs. All other
+accounts are unrestricted and do not call the limiter. Requests within that
+interval receive HTTP 429 with a `Retry-After` header, before any Workers KV
+access. This also applies to manual sync and custom clients. The three APIs have
+separate cooldowns; image downloads and sync acknowledgements are excluded.
+Cooldowns persist in the `SyncRateLimiter` SQLite-backed Durable Object configured
+in both Wrangler files. If the limiter is unavailable, polling returns HTTP 503
+without accessing KV for a listed account. An absent or empty target secret
+disables this restriction. Never commit the target account IDs to source control.
+
 ## File Naming Variables
 
 You can customize file names using these variables:

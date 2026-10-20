@@ -2,6 +2,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors'
 import { getPendingMessages, recordSyncActivity } from './sync-index';
+import { limitSyncRequests } from './sync-rate-limit';
+export { SyncRateLimiter } from './sync-rate-limit';
 import type { Context } from 'hono';
 import { createCheckoutSession, createPortalSession, verifyWebhookSignature } from './stripe/client';
 import {
@@ -31,13 +33,15 @@ interface Bindings {
   LINE_IMAGES: R2Bucket;
   LINE_SUBSCRIPTIONS: KVNamespace;
   AI: AiBinding;
+  SYNC_RATE_LIMITER: DurableObjectNamespace;
+  SYNC_RATE_LIMIT_ACCOUNTS: string;
   NOTE_FOLDER_PATH: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID: string;
   STRIPE_PUBLISHABLE_KEY: string;
   PAYMENT_PAGE_URL: string;
-  [key: string]: string | KVNamespace | R2Bucket | AiBinding;
+  [key: string]: string | KVNamespace | R2Bucket | AiBinding | DurableObjectNamespace;
 }
 
 interface LineMessage {
@@ -214,7 +218,7 @@ app.use('*', cors({
   origin: ['app://obsidian.md', 'https://line-notes-sync.pages.dev'],
   allowMethods: ['GET', 'POST', 'DELETE'],
   allowHeaders: ['Content-Type', 'X-Vault-Id'],
-  exposeHeaders: ['Content-Length', 'Content-Type'],
+  exposeHeaders: ['Content-Length', 'Content-Type', 'Retry-After'],
   maxAge: 86400,
 }));
 
@@ -232,7 +236,7 @@ app.use('*', async (c, next) => {
 
 app.get('/health', (c: Context) => c.json({ status: 'ok' }));
 
-app.get('/messages/:vaultId/:userId', async (c: Context) => {
+app.get('/messages/:vaultId/:userId', limitSyncRequests('messages', 'userId'), async (c: Context) => {
   try {
     const vaultId = c.req.param('vaultId');
     const userId = c.req.param('userId');
@@ -1228,7 +1232,7 @@ app.get('/publickey/:userId', async (c: Context) => {
 });
 
 // Image endpoints
-app.get('/images/:vaultId/:userId', async (c: Context) => {
+app.get('/images/:vaultId/:userId', limitSyncRequests('images', 'userId'), async (c: Context) => {
   try {
     const vaultId = c.req.param('vaultId');
     const userId = c.req.param('userId');
@@ -1620,7 +1624,7 @@ app.post('/stripe/create-portal-session', async (c: Context) => {
 });
 
 // Get subscription status
-app.get('/subscription/:lineUserId', async (c: Context) => {
+app.get('/subscription/:lineUserId', limitSyncRequests('subscription', 'lineUserId'), async (c: Context) => {
   try {
     const lineUserId = c.req.param('lineUserId');
 
